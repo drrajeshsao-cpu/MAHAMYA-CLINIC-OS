@@ -480,3 +480,60 @@ img,svg,video,canvas{max-width:100%!important;height:auto}
   .top-actions{grid-template-columns:1fr 1fr!important}
   .brand h1{font-size:19px!important}
 }
+
+/* V1.4 dashboard and reminder polish */
+.dashboard-hero .dashboard-wisdom{
+  margin-top:14px;padding:10px 12px;border-radius:14px;
+  background:linear-gradient(90deg,rgba(255,244,182,.65),rgba(239,247,232,.6));
+  border:1px solid #ead18a;color:#6f4e11;font-weight:700;font-size:13px
+}
+.dashboard-side{display:grid;place-items:center}
+.prosperity-pill{
+  margin-top:12px;display:inline-flex;padding:8px 12px;border-radius:999px;
+  font-weight:800;font-size:12px;border:1px solid #e3c468
+}
+.prosperity-pill.good{background:linear-gradient(180deg,#eff8ec,#e8f4e2);color:#356943;border-color:#cde3c7}
+.prosperity-pill.watch{background:linear-gradient(180deg,#fff5df,#fff0d0);color:#8e5f13;border-color:#e7ca82}
+.focus-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.focus-tile{
+  padding:15px;border:1px solid #e7d7aa;border-radius:16px;
+  background:linear-gradient(180deg,#fffef8,#fff8e6)
+}
+.focus-tile span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#7b6d52;font-weight:800}
+.focus-tile b{display:block;margin-top:6px;font-size:24px;color:#18283f}
+.focus-tile small{display:block;margin-top:5px;color:#7c8188}
+.prayer-card{background:linear-gradient(135deg,rgba(255,253,244,.98),rgba(245,251,240,.98))}
+.prayer-note{
+  margin-top:12px;padding:12px 14px;border-radius:16px;
+  background:linear-gradient(90deg,rgba(255,239,166,.55),rgba(255,251,232,.85));
+  border:1px solid #ead28f;color:#765310;font-weight:700;line-height:1.5
+}
+.reminder-stack{display:grid;gap:10px}
+.reminder-item{
+  display:flex;justify-content:space-between;gap:12px;align-items:flex-start;
+  padding:12px;border:1px solid #e7d8ab;border-radius:16px;
+  background:linear-gradient(180deg,#fffef8,#fffaf0)
+}
+.reminder-item.overdue{border-color:#e5b3ab;background:linear-gradient(180deg,#fff4f2,#fffaf5)}
+.reminder-item.today{border-color:#ead083;background:linear-gradient(180deg,#fff8df,#fffdf2)}
+.reminder-item.upcoming{border-color:#d7dfb4;background:linear-gradient(180deg,#f9fff5,#fffef7)}
+.reminder-main{display:grid;gap:7px;min-width:0}
+.reminder-main b{font-size:15px;color:#1c2f49}
+.reminder-main small{color:#6f7782;line-height:1.45}
+.reminder-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.reminder-date{font-size:12px;color:#735611;font-weight:700}
+.reminder-actions{display:grid;gap:8px;justify-items:end;flex:0 0 auto}
+.reminder-state{font-size:11px;font-weight:800;padding:5px 9px;border-radius:999px;border:1px solid #e3d3a4;background:#fff9e8;color:#7a5d1c}
+.reminder-state.overdue{background:#fff0ec;border-color:#e4b4ae;color:#94433d}
+.reminder-state.today{background:#fff7de;border-color:#e7cd82;color:#8a6414}
+.reminder-state.upcoming{background:#eef8ed;border-color:#cfe1c8;color:#396b44}
+.dashboard-mantra{
+  padding:15px 16px;border-radius:16px;margin-bottom:12px;
+  background:linear-gradient(90deg,rgba(255,239,170,.65),rgba(241,248,236,.7));
+  border:1px solid #e5d08e;color:#5f4a1b;font-weight:800;line-height:1.6
+}
+@media(max-width:720px){
+  .focus-grid{grid-template-columns:1fr}
+  .reminder-item{display:grid}
+  .reminder-actions{justify-items:start}
+}

@@ -45,7 +45,7 @@ const seed={
   ],
   bills:[], incomes:[], expenses:[], inventory:[], vendors:[], staff:[],
   swarnaprashan:[], camps:[], assets:[], maintenance:[], closings:[],
-  reminders:[], audit:[]
+  audit:[]
 };
 let db=load();
 
@@ -108,49 +108,6 @@ function invValue(filter=null){
   const rows=filter?db.inventory.filter(x=>x.segment===filter):db.inventory;
   return sum(rows,x=>Number(x.qty||0)*Number(x.purchaseRate||0))
 }
-function formatDate(d){
-  if(!d) return 'No date';
-  try{return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}catch{return d}
-}
-function reminderState(r){
-  if(r.done) return 'done';
-  if(!r.dueDate) return 'open';
-  return r.dueDate<today()?'overdue':r.dueDate===today()?'today':'upcoming';
-}
-function reminderPriorityClass(p='Medium'){
-  return ({High:'red',Medium:'orange',Low:'green'})[p]||'orange';
-}
-function upcomingReminders(limit=6){
-  return [...(db.reminders||[])]
-    .filter(r=>!r.done)
-    .sort((a,b)=>String(a.dueDate||'9999-99-99').localeCompare(String(b.dueDate||'9999-99-99')))
-    .slice(0,limit);
-}
-function reminderCounts(){
-  const rows=(db.reminders||[]).filter(r=>!r.done);
-  return {
-    total:rows.length,
-    overdue:rows.filter(r=>reminderState(r)==='overdue').length,
-    today:rows.filter(r=>reminderState(r)==='today').length,
-    upcoming:rows.filter(r=>reminderState(r)==='upcoming').length
-  };
-}
-function renderReminderList(rows){
-  if(!rows.length) return '<div class="empty">No reminders yet. Add your first reminder for payments, stock, maintenance, seva or follow-up tasks.</div>';
-  return `<div class="reminder-stack">${rows.map(r=>{
-    const state=reminderState(r), pri=reminderPriorityClass(r.priority), stateLabel=state==='overdue'?'Overdue':state==='today'?'Today':state==='done'?'Done':'Upcoming';
-    return `<div class="reminder-item ${state}"><div class="reminder-main"><div class="reminder-meta"><span class="badge ${pri}">${esc(r.priority||'Medium')}</span><span class="badge">${esc(r.category||'General')}</span><span class="reminder-date">${formatDate(r.dueDate)}</span></div><b>${esc(r.title||'Reminder')}</b><small>${esc(r.note||'')}${r.linkedView?` • Open in ${esc(pageMeta[r.linkedView]?.[0]||r.linkedView)}`:''}</small></div><div class="reminder-actions"><span class="reminder-state ${state}">${stateLabel}</span><button class="small" data-remdone="${esc(r.id)}">✓ Done</button><button class="small" data-remdelete="${esc(r.id)}">Delete</button></div></div>`;
-  }).join('')}</div>`;
-}
-function dailyWisdom(){
-  const msgs=[
-    'सेवा, शुचिता और समयपालन से ही समृद्धि स्थिर होती है।',
-    'कृष्ण कृपा, व्यवस्थित कार्य और शांत मन — यही सफल क्लिनिक की शक्ति है।',
-    'रोगी सेवा + स्पष्ट लेखा + समय पर follow-up = संतोष और प्रगति।'
-  ];
-  return msgs[new Date().getDate()%msgs.length];
-}
-
 function dashboard(){
   const bills=todays(db.bills), inc=todays(db.incomes), exp=todays(db.expenses);
   const billed=sum(bills,x=>x.total), received=sum(bills,billReceived)+sum(inc,x=>x.amount);
@@ -159,117 +116,54 @@ function dashboard(){
   const pendingVendor=sum(db.vendors,x=>x.outstanding);
   const sw=monthRows(db.swarnaprashan);
   const swReceived=sum(sw,x=>x.received);
-  const counts=reminderCounts();
-  const monthBills=monthRows(db.bills), monthIncomes=monthRows(db.incomes), monthExpenses=monthRows(db.expenses);
-  const monthReceived=sum(monthBills,billReceived)+sum(monthIncomes,x=>x.amount);
-  const monthSpent=sum(monthExpenses,x=>x.amount);
-  const monthSurplus=monthReceived-monthSpent;
-  const nextMaintenance=[...db.maintenance].filter(x=>x.nextDue||x.status==='Due'||x.status==='Overdue').sort((a,b)=>String(a.nextDue||'9999-99-99').localeCompare(String(b.nextDue||'9999-99-99'))).slice(0,3);
-  const recentIncome=[...db.incomes].reverse().slice(0,4);
-  const dueBills=[...db.bills].filter(b=>billDue(b)>0).sort((a,b)=>billDue(b)-billDue(a)).slice(0,4);
   return `
-  <div class="hero dashboard-hero">
+  <div class="hero">
     <div>
-      <span class="badge green">Ayurvedic Prosperity Dashboard</span>
+      <span class="badge green">Integrated Clinic Operations</span>
       <h3>${esc(db.settings.clinicName)}</h3>
-      <p>Welcome, ${esc(db.settings.owner||'Doctor')}. This dashboard is designed to feel calm, sacred and practical — keeping finance, stock, reminders and clinic priorities together in one soothing Ayurveda-inspired space.</p>
+      <p>One entry updates billing, payment mode, outstanding, staff accountability and management reports. Inventory and finance remain clearly separated by Ayurveda, Allopathy and operational categories.</p>
       <div class="actions" style="margin-top:14px">
         <button class="primary" data-action="bill">+ New Bill</button>
-        <button data-action="income">+ Add Income</button>
         <button data-action="expense">+ Expense</button>
-        <button data-action="reminder">⏰ Reminder</button>
-      </div>
-      <div class="dashboard-wisdom">🙏 ${dailyWisdom()}</div>
-    </div>
-    <div class="hero-side dashboard-side">
-      <div>
-        <small class="muted">Today Received</small>
-        <b>${money(received)}</b>
-        <small class="muted">Expenses ${money(expenses)} • Due ${money(due)}</small>
-        <div class="prosperity-pill ${monthSurplus>=0?'good':'watch'}">This month ${monthSurplus>=0?'surplus':'balance'} ${money(monthSurplus)}</div>
+        <button data-action="inventory">+ Stock Item</button>
       </div>
     </div>
+    <div class="hero-side"><div><small class="muted">Today Received</small><b>${money(received)}</b><small class="muted">Expenses ${money(expenses)}</small></div></div>
   </div>
-
   <div class="kpis">
     <div class="kpi"><span>Today Billing</span><b>${money(billed)}</b><small>${bills.length} bills</small></div>
     <div class="kpi"><span>Today Received</span><b>${money(received)}</b><small>Bill + other income</small></div>
-    <div class="kpi"><span>Active Reminders</span><b>${counts.total}</b><small>${counts.overdue} overdue • ${counts.today} today</small></div>
+    <div class="kpi"><span>Today Expenses</span><b>${money(expenses)}</b><small>All expense heads</small></div>
     <div class="kpi"><span>Patient Due</span><b>${money(due)}</b><small>Today bills</small></div>
   </div>
-
   <div class="grid2">
     <div class="card">
-      <div class="section-title"><div><h3>Main Operational Snapshot</h3><div class="muted">Everything important at one glance</div></div><button class="small" data-action="reminder">+ Add Reminder</button></div>
-      <div class="focus-grid">
-        <div class="focus-tile"><span>Low Stock</span><b>${low}</b><small>items need review</small></div>
-        <div class="focus-tile"><span>Vendor Outstanding</span><b>${money(pendingVendor)}</b><small>payables</small></div>
-        <div class="focus-tile"><span>Swarnaprashan</span><b>${money(swReceived)}</b><small>received this month</small></div>
-        <div class="focus-tile"><span>Maintenance Due</span><b>${db.maintenance.filter(x=>x.status==='Due'||x.status==='Overdue').length}</b><small>asset/service tasks</small></div>
-      </div>
-    </div>
-    <div class="card prayer-card">
-      <h3>Clinic Dharma & Prosperity</h3>
-      <div class="metric-list">
-        <div class="metric-row"><span>Owner / Admin</span><b>${esc(db.settings.owner||'-')}</b></div>
-        <div class="metric-row"><span>Cloud Status</span><b>${esc(document.getElementById('cloudLabel')?.textContent||'Local mode')}</b></div>
-        <div class="metric-row"><span>Monthly Received</span><b>${money(monthReceived)}</b></div>
-        <div class="metric-row"><span>Monthly Expenses</span><b>${money(monthSpent)}</b></div>
-        <div class="metric-row"><span>Operational Balance</span><b>${money(monthSurplus)}</b></div>
-      </div>
-      <div class="prayer-note">श्रीकृष्ण कृपा से सेवा, सद्भाव और सुव्यवस्थित कार्य निरंतर बढ़ते रहें।</div>
-    </div>
-  </div>
-
-  <div class="grid2" style="margin-top:14px">
-    <div class="card">
-      <div class="section-title"><div><h3>Important Reminders</h3><div class="muted">Overdue, today and upcoming reminders</div></div><button class="small" data-action="reminder">+ New</button></div>
-      ${renderReminderList(upcomingReminders(6))}
-    </div>
-    <div class="card">
-      <div class="section-title"><div><h3>What Needs Attention?</h3><div class="muted">Immediate actionable items</div></div><button class="small" data-viewjump="reports">Reports</button></div>
-      <div class="alert-list">
-        <div class="alert ${low?'red':''}">${low} low/out-of-stock item(s)</div>
-        <div class="alert ${counts.overdue?'red':''}">${counts.overdue} reminder(s) overdue</div>
-        <div class="alert ${dueBills.length?'red':''}">${dueBills.length} bill(s) still having due amount</div>
-        <div class="alert">${money(pendingVendor)} vendor outstanding</div>
-      </div>
-      <h4>Due Bills</h4>
-      <div class="list-cards">${dueBills.map(b=>`<div class="item-row"><div><b>${esc(b.patient||'Patient')}</b><br><small>${formatDate(b.date)} • Due ${money(billDue(b))}</small></div></div>`).join('')||'<div class="empty">No due bills.</div>'}</div>
-    </div>
-  </div>
-
-  <div class="grid2" style="margin-top:14px">
-    <div class="card">
-      <div class="section-title"><div><h3>Inventory & Service Overview</h3><div class="muted">Stock health and vertical contribution</div></div><button class="small" data-viewjump="inventory">Open Inventory</button></div>
+      <div class="section-title"><h3>Inventory Control</h3><button class="small" data-viewjump="inventory">Open</button></div>
       <div class="inventory-cards">
         <div class="inv-card"><span class="muted">Ayurveda</span><b>${money(invValue('Ayurveda Medicines'))}</b></div>
         <div class="inv-card"><span class="muted">Allopathy</span><b>${money(invValue('Allopathic Medicines'))}</b></div>
         <div class="inv-card"><span class="muted">Low Stock</span><b>${low}</b></div>
         <div class="inv-card"><span class="muted">Total Stock Value</span><b>${money(invValue())}</b></div>
       </div>
-      <h4 style="margin-top:16px">This Month by Vertical</h4>
+    </div>
+    <div class="card">
+      <h3>What Needs Attention?</h3>
+      <div class="alert-list">
+        <div class="alert ${low?'red':''}">${low} low/out-of-stock item(s)</div>
+        <div class="alert">${money(pendingVendor)} vendor outstanding</div>
+        <div class="alert">${money(swReceived)} Swarnaprashan received this month</div>
+        <div class="alert">${db.maintenance.filter(x=>x.status==='Due'||x.status==='Overdue').length} maintenance item(s) due/overdue</div>
+      </div>
+    </div>
+  </div>
+  <div class="grid2" style="margin-top:14px">
+    <div class="card">
+      <h3>This Month by Vertical</h3>
       ${verticalSummary()}
     </div>
     <div class="card">
-      <div class="section-title"><div><h3>Recent Income & Maintenance</h3><div class="muted">Fresh activity snapshot</div></div><button class="small" data-viewjump="closing">Daily Closing</button></div>
-      <h4>Recent Income</h4>
-      <div class="list-cards">${recentIncome.map(x=>`<div class="item-row"><div><b>${esc(x.source||'Income')}</b><br><small>${formatDate(x.date)} • ${esc(x.mode||'-')}</small></div><b>${money(x.amount)}</b></div>`).join('')||'<div class="empty">No recent income.</div>'}</div>
-      <h4>Upcoming Maintenance / AMC</h4>
-      <div class="list-cards">${nextMaintenance.map(x=>`<div class="item-row"><div><b>${esc(x.asset||'Maintenance')}</b><br><small>${esc(x.category||'-')} • ${formatDate(x.nextDue||x.date)}</small></div><span class="badge ${x.status==='Overdue'?'red':x.status==='Due'?'orange':'green'}">${esc(x.status||'Planned')}</span></div>`).join('')||'<div class="empty">No maintenance schedules.</div>'}</div>
-    </div>
-  </div>
-
-  <div class="grid2" style="margin-top:14px">
-    <div class="card">
       <h3>Recent Audit Activity</h3>
       <div class="list-cards">${db.audit.slice(0,6).map(a=>`<div class="item-row"><div><b>${esc(a.action)}</b><br><small>${new Date(a.ts).toLocaleString()}</small></div></div>`).join('')||'<div class="empty">No activity yet.</div>'}</div>
-    </div>
-    <div class="card">
-      <h3>Quick Remembrance</h3>
-      <div class="dashboard-mantra">“कर्मण्येवाधिकारस्ते” — stay focused on service, accuracy and compassionate care.</div>
-      <p class="muted">Use reminders for due payments, stock purchase, maintenance, staff salary, Swarnaprashan events, camp planning and daily closing follow-up.</p>
-      <div class="actions"><button data-action="reminder">Set Reminder</button><button data-viewjump="settings">Open Settings</button></div>
     </div>
   </div>`;
 }
@@ -282,17 +176,17 @@ function verticalSummary(){
 }
 function billing(){
   const rows=[...db.bills].reverse();
-  return `<div class="section-title"><div><h3>Patient Bills</h3><div class="muted">Fast billing, collections and due tracking</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary" data-action="bill">+ New Bill</button></div></div>
+  return `<div class="section-title"><h3>Patient Bills</h3><button class="primary" data-action="bill">+ New Bill</button></div>
   ${table(rows,['Date','Patient','Services','Total','Received','Due','Mode'],b=>[
     esc(b.date),esc(b.patient),esc((b.items||[]).map(i=>i.name).join(', ')),money(b.total),money(billReceived(b)),money(billDue(b)),esc(b.mode||'Split')
   ])}`;
 }
 function income(){
-  return `<div class="section-title"><div><h3>Income Ledger</h3><div class="muted">Track every clinic and professional income source</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary" data-action="income">+ Add Income</button></div></div>
+  return `<div class="section-title"><h3>Income Ledger</h3><button class="primary" data-action="income">+ Add Income</button></div>
   ${table([...db.incomes].reverse(),['Date','Source','Category','Amount','Mode','Handled By'],x=>[esc(x.date),esc(x.source),esc(x.category),money(x.amount),esc(x.mode),esc(x.handledBy||'-')])}`;
 }
 function expenses(){
-  return `<div class="section-title"><div><h3>Expense Ledger</h3><div class="muted">Expenses, payables and operational cost control</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary" data-action="expense">+ Add Expense</button></div></div>
+  return `<div class="section-title"><h3>Expense Ledger</h3><button class="primary" data-action="expense">+ Add Expense</button></div>
   ${table([...db.expenses].reverse(),['Date','Expense','Category','Amount','Mode','Paid To','Handled By'],x=>[esc(x.date),esc(x.name),esc(x.category),money(x.amount),esc(x.mode),esc(x.paidTo||'-'),esc(x.handledBy||'-')])}`;
 }
 const invTabs=['Ayurveda Medicines','Allopathic Medicines','Injection/IV & Procedure','Dressing/Suturing/POP','Panchakarma Materials','Orthopedic Supports','Printing & Stationery','General Consumables'];
@@ -305,14 +199,14 @@ function inventory(){
   ])}`;
 }
 function vendors(){
-  return `<div class="section-title"><div><h3>Vendor / Party Master</h3><div class="muted">Suppliers, purchase history and outstanding management</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary" data-action="vendor">+ Add Vendor</button></div></div>
+  return `<div class="section-title"><h3>Vendor / Party Master</h3><button class="primary" data-action="vendor">+ Add Vendor</button></div>
   ${table(db.vendors,['Party','Type','Contact','Total Purchase','Paid','Outstanding','Actions'],x=>[
     esc(x.name),esc(x.type),esc(x.phone||'-'),money(x.totalPurchase),money(x.paid),money(x.outstanding),
     `<a href="${x.phone?'tel:'+esc(x.phone):'#'}">Call</a> ${x.phone?`• <a href="https://wa.me/91${esc(x.phone.replace(/\D/g,''))}" target="_blank">WhatsApp</a>`:''}`
   ])}`;
 }
 function staff(){
-  return `<div class="section-title"><div><h3>Staff & Payroll</h3><div class="muted">Team details, salary and pending accountability</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary" data-action="staff">+ Add Staff</button></div></div>
+  return `<div class="section-title"><h3>Staff & Payroll</h3><button class="primary" data-action="staff">+ Add Staff</button></div>
   ${table(db.staff,['Name','Role','Salary Type','Rate/Salary','Advance','Paid','Pending','Contact'],x=>[
     esc(x.name),esc(x.role),esc(x.salaryType),money(x.salary),money(x.advance),money(x.paid),money(Math.max(0,Number(x.salary)-Number(x.advance)-Number(x.paid))),esc(x.phone||'-')
   ])}`;
@@ -325,13 +219,13 @@ function swarnaprashan(){
     <div class="kpi"><span>Received</span><b>${money(sum(m,x=>x.received))}</b></div>
     <div class="kpi"><span>Pending</span><b>${money(sum(m,x=>Number(x.billed)-Number(x.received)))}</b></div>
   </div>
-  <div class="section-title"><div><h3>Monthly Swarnaprashan Ledger</h3><div class="muted">Pushya-wise activity, billing and administration tracking</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary" data-action="swarnaprashan">+ Add Entry</button></div></div>
+  <div class="section-title"><h3>Monthly Swarnaprashan Ledger</h3><button class="primary" data-action="swarnaprashan">+ Add Entry</button></div>
   ${table(rows,['Date','Child / Event','Clinic Dose','Home Use','Billing','Received','Mode','Administered By','Payment By'],x=>[
     esc(x.date),esc(x.child),esc(x.clinicDose),esc(x.homeUse),money(x.billed),money(x.received),esc(x.mode),esc(x.administeredBy||'-'),esc(x.paymentBy||'-')
   ])}`;
 }
 function camps(){
-  return `<div class="section-title"><div><h3>Camp / Seva Cost Centres</h3><div class="muted">Events, seva and sponsor-backed outreach management</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary" data-action="camp">+ Add Camp</button></div></div>
+  return `<div class="section-title"><h3>Camp / Seva Cost Centres</h3><button class="primary" data-action="camp">+ Add Camp</button></div>
   ${table(db.camps,['Date','Camp','Type','Patients','Expense','Donation/Sponsor','Net Clinic Contribution','Location'],x=>[
     esc(x.date),esc(x.name),esc(x.type),esc(x.patients),money(x.expense),money(x.support),money(Math.max(0,Number(x.expense)-Number(x.support))),esc(x.location||'-')
   ])}`;
@@ -339,11 +233,11 @@ function camps(){
 function assets(){
   return `<div class="grid2">
     <div class="card">
-      <div class="section-title"><div><h3>Assets / Equipment</h3><div class="muted">Clinical and non-clinical asset overview</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary small" data-action="asset">+ Add Asset</button></div></div>
+      <div class="section-title"><h3>Assets / Equipment</h3><button class="primary small" data-action="asset">+ Add Asset</button></div>
       ${table(db.assets,['Asset','Segment','Location','Cost','Status','Next Service'],x=>[esc(x.name),esc(x.segment),esc(x.location||'-'),money(x.cost),esc(x.status),esc(x.nextService||'-')])}
     </div>
     <div class="card">
-      <div class="section-title"><div><h3>Repair / Maintenance / AMC</h3><div class="muted">Schedule service, due dates and repair follow-up</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary small" data-action="maintenance">+ Add Maintenance</button></div></div>
+      <div class="section-title"><h3>Repair / Maintenance / AMC</h3><button class="primary small" data-action="maintenance">+ Add Maintenance</button></div>
       ${table(db.maintenance,['Date','Asset / Work','Category','Vendor','Cost','Status','Next Due'],x=>[esc(x.date),esc(x.asset),esc(x.category),esc(x.vendor||'-'),money(x.cost),esc(x.status),esc(x.nextDue||'-')])}
     </div>
   </div>`;
@@ -450,9 +344,7 @@ function quickEntry(){
     <button data-action="inventory">📦 Stock Item</button>
     <button data-action="vendor">🏢 Vendor</button>
     <button data-action="swarnaprashan">🧒 Swarnaprashan</button>
-    <button data-action="maintenance">🛠 Maintenance</button>
-    <button data-action="reminder">⏰ Reminder</button>
-  </div>`,'Choose the transaction or reminder you want to enter.');
+  </div>`,'Choose the transaction you want to enter.');
   bindModalActions();
 }
 function billModal(){
@@ -626,40 +518,17 @@ function maintenanceModal(){
   $('#saveMaintenanceBtn').onclick=()=>{const x={id:uid('MNT'),date:$('#mtDate').value,asset:$('#mtAsset').value,category:$('#mtCat').value,vendor:$('#mtVendor').value,cost:Number($('#mtCost').value||0),status:$('#mtStatus').value,nextDue:$('#mtDue').value,paymentStatus:$('#mtPay').value,notes:$('#mtNotes').value};db.maintenance.push(x);save(`Maintenance ${x.asset} added`);closeModal();render();toast('Maintenance saved')};
 }
 
-function reminderModal(prefill={}){
-  const linked=Object.entries(pageMeta).map(([k,v])=>`<option value="${k}" ${String(prefill.linkedView||currentView)===k?'selected':''}>${esc(v[0])}</option>`).join('');
-  modal('Add Reminder',`<div class="form-grid">
-    <label>Reminder Title<input id="rTitle" value="${esc(prefill.title||'')}" placeholder="Vendor payment / stock reorder / salary / follow-up"></label>
-    <label>Category<select id="rCategory"><option ${prefill.category==='Payment'?'selected':''}>Payment</option><option ${prefill.category==='Stock'?'selected':''}>Stock</option><option ${prefill.category==='Maintenance'?'selected':''}>Maintenance</option><option ${prefill.category==='Staff'?'selected':''}>Staff</option><option ${prefill.category==='Swarnaprashan'?'selected':''}>Swarnaprashan</option><option ${prefill.category==='Camp'?'selected':''}>Camp</option><option ${prefill.category==='Personal'?'selected':''}>Personal</option><option ${!prefill.category||prefill.category==='General'?'selected':''}>General</option></select></label>
-    <label>Due Date<input id="rDueDate" type="date" value="${esc(prefill.dueDate||today())}"></label>
-    <label>Priority<select id="rPriority"><option ${prefill.priority==='High'?'selected':''}>High</option><option ${!prefill.priority||prefill.priority==='Medium'?'selected':''}>Medium</option><option ${prefill.priority==='Low'?'selected':''}>Low</option></select></label>
-    <label>Open With Page<select id="rLinked">${linked}</select></label>
-    <label>Status<select id="rStatus"><option>Open</option><option>Planned</option></select></label>
-    <label class="full">Notes<textarea id="rNote" placeholder="What exactly should be remembered? amount, contact, follow-up, stock name etc.">${esc(prefill.note||'')}</textarea></label>
-    <div class="full"><button class="primary" id="saveReminderBtn">Save Reminder</button></div>
-  </div>`,'Create reminders for finance, stock, maintenance, salary, seva, follow-up or any important clinic work.');
-  $('#saveReminderBtn').onclick=()=>{
-    const x={id:uid('REM'),title:$('#rTitle').value||'Reminder',category:$('#rCategory').value,dueDate:$('#rDueDate').value,priority:$('#rPriority').value,linkedView:$('#rLinked').value,status:$('#rStatus').value,note:$('#rNote').value,done:false,createdAt:nowISO()};
-    db.reminders=(db.reminders||[]);
-    db.reminders.push(x);
-    save(`Reminder ${x.title} added`);
-    closeModal();render();toast('Reminder saved');
-  };
-}
-
 function bindModalActions(){
   $$('[data-action]').forEach(b=>b.onclick=()=>action(b.dataset.action));
 }
 function action(a){
-  const map={bill:billModal,income:incomeModal,expense:expenseModal,inventory:inventoryModal,vendor:vendorModal,staff:staffModal,swarnaprashan:swarnaModal,camp:campModal,asset:assetModal,maintenance:maintenanceModal,reminder:()=>reminderModal({linkedView:currentView,category: currentView==='expenses'||currentView==='vendors'?'Payment':currentView==='inventory'?'Stock':currentView==='assets'?'Maintenance':currentView==='staff'?'Staff':currentView==='swarnaprashan'?'Swarnaprashan':currentView==='camps'?'Camp':'General'})};
+  const map={bill:billModal,income:incomeModal,expense:expenseModal,inventory:inventoryModal,vendor:vendorModal,staff:staffModal,swarnaprashan:swarnaModal,camp:campModal,asset:assetModal,maintenance:maintenanceModal};
   if(map[a]){closeModal();map[a]()}
 }
 function bindView(){
   $$('[data-action]').forEach(b=>b.onclick=()=>action(b.dataset.action));
   $$('[data-viewjump]').forEach(b=>b.onclick=()=>{currentView=b.dataset.viewjump;render()});
-  $('[data-invtab]').forEach(b=>b.onclick=()=>{inventoryTab=b.dataset.invtab;render()});
-  $('[data-remdone]').forEach(b=>b.onclick=()=>{const id=b.dataset.remdone; const r=(db.reminders||[]).find(x=>x.id===id); if(r){r.done=true;r.doneAt=nowISO();save(`Reminder ${r.title} completed`);render();toast('Reminder marked done')}});
-  $('[data-remdelete]').forEach(b=>b.onclick=()=>{const id=b.dataset.remdelete; const r=(db.reminders||[]).find(x=>x.id===id); if(confirm('Delete this reminder?')){db.reminders=(db.reminders||[]).filter(x=>x.id!==id);save(`Reminder ${r?.title||id} deleted`);render();toast('Reminder deleted')}});
+  $$('[data-invtab]').forEach(b=>b.onclick=()=>{inventoryTab=b.dataset.invtab;render()});
   if($('#closeDayBtn')) $('#closeDayBtn').onclick=closeDay;
   if($('#saveSettingsBtn')) $('#saveSettingsBtn').onclick=()=>{db.settings.clinicName=$('#setClinicName').value;db.settings.owner=$('#setOwner').value;db.settings.consultationRate=Number($('#setConsult').value||0);db.settings.followupRate=Number($('#setFollow').value||0);save('Clinic settings updated');render();toast('Settings saved')};
   if($('#settingsBackupBtn')) $('#settingsBackupBtn').onclick=backup;

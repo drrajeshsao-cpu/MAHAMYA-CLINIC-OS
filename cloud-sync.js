@@ -4,7 +4,7 @@ import { getFirestore,collection,doc,getDoc,getDocs,setDoc,onSnapshot,serverTime
 import { firebaseConfig,ADMIN_EMAIL } from "./firebase-config.js";
 
 const DB_KEY="mahamayaClinicOS_v1";
-const SECTIONS=["bills","incomes","expenses","inventory","vendors","staff","swarnaprashan","camps","assets","maintenance","closings","audit"];
+const SECTIONS=["bills","incomes","expenses","inventory","vendors","staff","swarnaprashan","camps","assets","maintenance","closings","reminders","audit"];
 const dot=document.getElementById("cloudDot"),label=document.getElementById("cloudLabel"),chip=document.getElementById("userChip"),cloudBtn=document.getElementById("cloudBtn");
 const configured=firebaseConfig?.apiKey&&!String(firebaseConfig.apiKey).includes("PASTE_")&&firebaseConfig?.projectId&&!String(firebaseConfig.projectId).includes("PASTE_");
 let applyingRemote=false,unsubs=[],auth=null,fs=null;
