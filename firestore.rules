@@ -1,8 +1,19 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isClinicAdmin(){ return request.auth != null && request.auth.token.email == "ADMIN_EMAIL_HERE"; }
-    match /clinicOS_data/{document=**} { allow read, write: if isClinicAdmin(); }
-    match /{document=**} { allow read, write: if false; }
+
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email == "dr.raju2010@gmail.com";
+    }
+
+    match /clinicOS/{document=**} {
+      allow read, write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }
