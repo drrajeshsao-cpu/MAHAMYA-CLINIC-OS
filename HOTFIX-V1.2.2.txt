@@ -1,0 +1,27 @@
+MAHAMAYA CLINIC OS V1.2.2 — CRITICAL CLOUD + MOBILE FIX
+
+ROOT CAUSE FIXED:
+The published Firestore rule allows /clinicOS/** but the previous app wrote to /clinicOS_data/**.
+The app now writes to /clinicOS/**, matching the secure single-admin Firestore rule.
+
+Mobile fixes:
+- Mobile browsers no longer auto-open a blocking blurred login overlay when signed out.
+- App opens in local mode and Cloud can be tapped to sign in.
+- Login overlay has a visible Close button.
+- Mobile overlay backdrop blur removed.
+- Persistent Firestore cache attempts first, with memory-cache fallback.
+- Existing persistent Firebase Authentication is retained.
+
+Firebase settings/rules DO NOT need to change.
+
+GitHub commit:
+Fix V1.2.2 Firestore path mismatch and mobile cloud login compatibility
+
+After upload:
+1. Wait for GitHub Pages.
+2. Laptop: Ctrl+F5.
+3. The signed-in admin should change from Cloud unavailable to Synced.
+4. Mobile: close all old app tabs, reopen URL.
+5. If old blurred cached page remains, clear ONLY this site's cached/site data once.
+6. Tap Cloud and sign in once on mobile.
+7. Test one entry laptop -> mobile and one entry mobile -> laptop.

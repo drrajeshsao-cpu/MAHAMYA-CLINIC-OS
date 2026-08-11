@@ -366,3 +366,30 @@ input:focus,select:focus,textarea:focus{
   .module-tabs{padding-bottom:8px}
   .section-title{padding:9px}
 }
+
+/* V1.2.2 — MOBILE CLOUD SAFETY */
+.cloud-login-overlay{
+  overflow:auto!important;
+  padding:calc(16px + env(safe-area-inset-top)) 14px calc(18px + env(safe-area-inset-bottom))!important;
+}
+.cloud-login-card{position:relative!important}
+.cloud-login-close{
+  position:absolute!important;right:12px!important;top:12px!important;
+  width:38px!important;height:38px!important;padding:0!important;border-radius:50%!important;
+  display:grid!important;place-items:center!important;background:#fff8d8!important;color:#704d08!important;
+  border:1px solid #dfc66e!important;
+}
+@media(max-width:720px){
+  .cloud-login-overlay{
+    display:flex!important;
+    justify-content:center!important;
+    align-items:flex-start!important;
+    background:rgba(32,29,23,.24)!important;
+    backdrop-filter:none!important;
+    -webkit-backdrop-filter:none!important;
+  }
+  .cloud-login-card{
+    width:100%!important;max-width:430px!important;margin:20px auto!important;
+    border-radius:20px!important;padding:22px 16px 18px!important;transform:none!important;
+  }
+}
