@@ -554,3 +554,19 @@ function restorePrompt(){
 }
 render();
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+
+// V1.3 stable viewport + cloud UI refresh
+function forceViewportLeft(){
+  try{
+    document.documentElement.scrollLeft=0;
+    document.body.scrollLeft=0;
+    if(window.scrollX!==0)window.scrollTo(0,window.scrollY||0);
+  }catch(e){}
+}
+window.addEventListener('pageshow',()=>setTimeout(forceViewportLeft,0));
+window.addEventListener('resize',()=>setTimeout(forceViewportLeft,0));
+window.addEventListener('orientationchange',()=>setTimeout(forceViewportLeft,120));
+window.addEventListener('mahamaya-cloud-updated',()=>{db=load();render();setTimeout(forceViewportLeft,0)});
+window.addEventListener('mahamaya-cloud-ready',()=>{db=load();render();setTimeout(forceViewportLeft,0)});
+setTimeout(forceViewportLeft,0);

@@ -1,0 +1,16 @@
+MAHAMAYA CLINIC OS V1.3 STABLE
+
+Major fixes:
+- Rebuilt responsive behavior for phone/tablet/laptop/desktop.
+- Forces document viewport back to the left edge on load, pageshow, resize and orientation change.
+- No document-level horizontal scrolling; only nav/tables/tabs can scroll internally.
+- Simplified Firebase Firestore client: removed browser-specific persistent Firestore cache.
+- Browser localStorage remains the offline safety layer.
+- Firebase Auth browserLocalPersistence remains unchanged.
+- Realtime cloud listeners update the visible app without requiring a manual page reload.
+- Cloud login is never forced; it opens only when Cloud is tapped.
+- Firestore path remains /clinicOS/** and matches current secure rules.
+- Single admin remains dr.raju2010@gmail.com.
+
+GitHub commit:
+Build V1.3 stable responsive layout and reliable single-admin realtime cloud sync
