@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <meta name="theme-color" content="#7b5a2d"/>
+  <title>Mahamaya Clinic OS</title>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="stylesheet" href="styles.css?v=1.0.0"/>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">MC</div>
+      <div>
+        <h1>Mahamaya Clinic OS</h1>
+        <p>Finance • Billing • Inventory • Audit</p>
+      </div>
+    </div>
+    <nav id="nav">
+      <button data-view="dashboard" class="active">🏠 Dashboard</button>
+      <button data-view="billing">🧾 Quick Billing</button>
+      <button data-view="income">₹ Income</button>
+      <button data-view="expenses">💸 Expenses</button>
+      <button data-view="inventory">📦 Inventory</button>
+      <button data-view="vendors">🏢 Vendors</button>
+      <button data-view="staff">👥 Staff & Salary</button>
+      <button data-view="swarnaprashan">🧒 Swarnaprashan</button>
+      <button data-view="camps">🤝 Camps / Seva</button>
+      <button data-view="assets">🛠 Assets & Maintenance</button>
+      <button data-view="closing">✅ Daily Closing</button>
+      <button data-view="reports">📊 Reports</button>
+      <button data-view="settings">⚙️ Settings</button>
+    </nav>
+    <div class="side-footer">
+      <span>Local-first Foundation V1.0</span>
+      <small>Cloud sync can be added after testing.</small>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <h2 id="pageTitle">Dashboard</h2>
+        <p id="pageSubtitle">Clinic finance, stock, staff and daily audit at a glance.</p>
+      </div>
+      <div class="top-actions">
+        <button class="primary" id="quickAddBtn">+ Quick Entry</button>
+        <button id="backupBtn">Backup JSON</button>
+      </div>
+    </header>
+
+    <section id="view"></section>
+  </main>
+</div>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <h3 id="modalTitle">Entry</h3>
+        <p id="modalHint"></p>
+      </div>
+      <button id="modalClose" class="icon-btn">✕</button>
+    </div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="app.js?v=1.0.0"></script>
+</body>
+</html>

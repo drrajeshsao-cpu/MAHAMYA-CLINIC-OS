@@ -1,0 +1,40 @@
+MAHAMAYA CLINIC OS — ARCHITECTURE NOTES
+
+Core verticals:
+1. OPD / Billing
+2. Ayurveda / Panchakarma
+3. Orthopedic / Spine
+4. Allopathic Medicines
+5. Finance / Audit
+6. Procurement / Vendors
+7. Inventory / Assets
+8. Staff / Payroll
+9. Swarnaprashan
+10. Camps / Seva
+
+Inventory is deliberately split into:
+- Ayurveda Medicines
+- Allopathic Medicines
+- Injection/IV & Procedure
+- Dressing/Suturing/POP
+- Panchakarma Materials
+- Orthopedic Supports
+- Printing & Stationery
+- General Consumables
+
+Asset / equipment is deliberately separate from consumable inventory:
+- Ayurvedic Clinical Equipment
+- Modern/Allopathic Clinical Equipment
+- Reusable Instruments
+- IT & Electronics
+- Furniture & Fixtures
+- Interior / Decorative
+- Signage / Branding
+- Electrical / Utility Assets
+
+Future phases:
+V1.1: Purchase invoices + stock movements + vendor payment ledger
+V1.2: Patient accounts + multi-service bills + PDF receipts
+V1.3: Role-based login + cloud sync + multi-device
+V1.4: Audit hardening + immutable corrections + approval workflows
+V1.5: Advanced analytics + reorder + expiry + budget + cash-flow forecasting

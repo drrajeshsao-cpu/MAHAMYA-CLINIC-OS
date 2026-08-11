@@ -1,0 +1,9 @@
+{
+  "name": "Mahamaya Clinic OS",
+  "short_name": "Mahamaya OS",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f2eb",
+  "theme_color": "#7b5a2d",
+  "description": "Integrated clinic finance, billing, inventory, staff and audit system."
+}
