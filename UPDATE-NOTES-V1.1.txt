@@ -1,0 +1,8 @@
+V1.1 Premium changes:
+- Yellow/gold/ivory premium theme with Ayurveda green and clinical blue accents.
+- Shankha-Chakra-Lotus-Kalash inspired sacred watermark motif.
+- Dhanvantari invocation in branding/login.
+- Improved sidebar, cards, sticky header and mobile layout.
+- Single-admin Firebase cloud-ready sync isolated from main app.
+- Persistent login + persistent multi-tab Firestore cache.
+- No public signup; admin-only Firestore rule template.

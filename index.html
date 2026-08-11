@@ -6,16 +6,15 @@
   <meta name="theme-color" content="#7b5a2d"/>
   <title>Mahamaya Clinic OS</title>
   <link rel="manifest" href="manifest.json"/>
-  <link rel="stylesheet" href="styles.css?v=1.0.0"/>
+  <link rel="stylesheet" href="styles.css?v=1.1.0"/>
 </head>
-<body>
-<div class="app-shell">
+<body><div class="sacred-watermark" aria-hidden="true"><svg viewBox="0 0 520 520"><defs><linearGradient id="wmG" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f1c83f"/><stop offset=".5" stop-color="#7dbb86"/><stop offset="1" stop-color="#6f91c8"/></linearGradient></defs><circle cx="260" cy="260" r="145" fill="none" stroke="url(#wmG)" stroke-width="7"/><circle cx="260" cy="260" r="116" fill="none" stroke="#e8bc36" stroke-width="3"/><g transform="translate(260 172)" stroke="#c99217" stroke-width="4" fill="none"><circle r="32"/><circle r="8"/><path d="M0-32V32M-32 0H32M-23-23L23 23M23-23L-23 23"/></g><g transform="translate(260 300)" fill="none" stroke="#6b9b76" stroke-width="6" stroke-linecap="round"><path d="M-42-20H42M-32-20c-8 16-8 45 5 63h54c13-18 13-47 5-63"/><path d="M-24-32c12-12 36-12 48 0"/><path d="M0-37c-10-19-27-24-38-21 4 15 17 24 38 21Z"/><path d="M0-37c10-19 27-24 38-21-4 15-17 24-38 21Z"/></g><path d="M154 262c28-33 50-24 63-4-18 0-29 10-36 28-8-10-17-18-27-24Z" fill="none" stroke="#7396cb" stroke-width="6"/><path d="M366 277c-20-22-42-22-58 0 18 2 28 13 29 29 7-13 17-23 29-29Z" fill="none" stroke="#dbac2b" stroke-width="6"/><path d="M170 385c28-40 58-53 90-50-16 30-44 48-90 50Zm180 0c-28-40-58-53-90-50 16 30 44 48 90 50Z" fill="#87b88d" fill-opacity=".52"/></svg></div><div class="app-shell">
   <aside class="sidebar">
     <div class="brand">
-      <div class="brand-mark">MC</div>
+      <div class="brand-mark" aria-label="Mahamaya Clinic emblem"><svg viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="brandGold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff6b6"/><stop offset=".45" stop-color="#f4c84a"/><stop offset="1" stop-color="#9f6a12"/></linearGradient></defs><circle cx="32" cy="32" r="26" fill="none" stroke="url(#brandGold)" stroke-width="2"/><path d="M32 14c3.6 6.5 8.9 10.3 15.3 12.2-6.3 2-11.6 5.8-15.3 12.3-3.6-6.5-8.9-10.3-15.3-12.3C23 24.3 28.4 20.5 32 14Z" fill="url(#brandGold)"/><path d="M20 43c6-4 18-4 24 0-6 7-18 7-24 0Z" fill="none" stroke="#f7d86a" stroke-width="2"/></svg></div>
       <div>
         <h1>Mahamaya Clinic OS</h1>
-        <p>Finance • Billing • Inventory • Audit</p>
+        <p>Integrated Ayurveda • Ortho/Spine • Finance</p><div class="brand-blessing">श्री धन्वन्तरये नमः</div>
       </div>
     </div>
     <nav id="nav">
@@ -33,10 +32,7 @@
       <button data-view="reports">📊 Reports</button>
       <button data-view="settings">⚙️ Settings</button>
     </nav>
-    <div class="side-footer">
-      <span>Local-first Foundation V1.0</span>
-      <small>Cloud sync can be added after testing.</small>
-    </div>
+    <div class="side-footer"><div class="cloud-mini"><span id="cloudDot" class="dot local"></span><span id="cloudLabel">Local mode</span></div><span>Premium Foundation V1.1</span><small>Single-admin • Local-first • Cloud-ready</small></div>
   </aside>
 
   <main class="main">
@@ -46,8 +42,7 @@
         <p id="pageSubtitle">Clinic finance, stock, staff and daily audit at a glance.</p>
       </div>
       <div class="top-actions">
-        <button class="primary" id="quickAddBtn">+ Quick Entry</button>
-        <button id="backupBtn">Backup JSON</button>
+        <div id="userChip" class="user-chip">🔒 Single Admin</div><button id="cloudBtn" class="cloud-btn">☁ Cloud</button><button class="primary" id="quickAddBtn">+ Quick Entry</button><button id="backupBtn">Backup</button>
       </div>
     </header>
 
@@ -70,6 +65,6 @@
 
 <div id="toast" class="toast"></div>
 
-<script src="app.js?v=1.0.0"></script>
+<script src="app.js?v=1.1.0"></script><script type="module" src="cloud-sync.js?v=1.1.0"></script>
 </body>
 </html>

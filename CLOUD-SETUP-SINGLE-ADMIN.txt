@@ -1,0 +1,23 @@
+MAHAMAYA CLINIC OS V1.1 — SINGLE ADMIN CLOUD SETUP
+
+1. Firebase Console: create/open project and Add Web App.
+2. Authentication > Sign-in method > Email/Password > Enable. Create ONLY the admin user.
+3. Paste Firebase web config into firebase-config.js. Set ADMIN_EMAIL to the same admin email. Never put password in code.
+4. Firestore Database > Create. In firestore.rules replace ADMIN_EMAIL_HERE with the same email, then publish those rules.
+5. Upload V1.1 files to GitHub.
+6. Test login persistence on laptop first: sign in > refresh > close browser > reopen.
+7. Test mobile/PWA: sign in > close > reopen.
+8. Add one test expense on laptop and verify on mobile; then one test income on mobile and verify on laptop.
+
+Login stability design:
+- browserLocalPersistence keeps signed-in state.
+- Firestore persistent multi-tab cache supports offline/local cache.
+- No public sign-up UI.
+- Firestore restricted to the single admin email.
+- cloud-sync.js is isolated from app.js; normal UI updates should not edit auth code.
+- Local mode still works if network/cloud is unavailable.
+
+Suggested commit:
+Polish Mahamaya Clinic OS V1.1 with premium Vishnu theme and single-admin cloud-ready sync
+
+Cloud data is split into granular Firestore collections to reduce cross-device overwrite risk.
