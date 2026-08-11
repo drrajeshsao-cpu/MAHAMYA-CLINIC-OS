@@ -122,3 +122,247 @@ button{border-color:#e4dbc6;background:#fffdf8;box-shadow:var(--shadow-soft);tra
 .cloud-login-overlay{position:fixed;inset:0;z-index:999;background:rgba(24,29,37,.52);backdrop-filter:blur(12px);display:grid;place-items:center;padding:18px}.cloud-login-card{width:min(430px,100%);background:linear-gradient(180deg,#fffef8,#fff8dd);border:1px solid #e7d18c;border-radius:24px;padding:24px;box-shadow:0 30px 90px rgba(41,31,14,.25);display:grid;gap:12px;text-align:center}.cloud-login-card h2{margin:2px 0 0}.cloud-login-card p{margin:0;color:#6f7782}.cloud-login-card label{text-align:left}.cloud-login-card button{width:100%}.login-emblem{width:66px;height:66px;margin:auto;border-radius:20px;display:grid;place-items:center;font-size:30px;color:#fff2a5;background:radial-gradient(circle at 30% 20%,#9c741e,#5e3e11)}.login-blessing{color:#956917!important;font-weight:900}#cloudLoginMsg{min-height:20px;font-size:12px;color:#a84d45;font-weight:700}
 @media(max-width:980px){.topbar{margin:-14px -14px 16px;padding:14px}.sacred-watermark{width:65vw;height:65vw;right:-12vw;bottom:2vh}}
 @media(max-width:720px){.main{padding:12px}.topbar{position:relative;margin:-12px -12px 14px;padding:14px 12px 12px}.top-actions{grid-template-columns:repeat(2,minmax(0,1fr))}.user-chip,.cloud-btn{width:100%}.brand-mark{width:52px;height:52px;flex:0 0 52px}.sacred-watermark{opacity:.04}}
+
+/* =====================================================================
+   V1.2 — SUNRISE GOLD
+   Premium saffron-yellow + warm ivory + Vishnu blue + Ayurveda green
+   ===================================================================== */
+:root{
+  --bg:#fff9e8;
+  --paper:#fffef9;
+  --paper2:#fff7d2;
+  --ink:#1b2b43;
+  --muted:#6f7781;
+  --line:#ead69b;
+  --gold:#9d6b05;
+  --gold2:#d79b11;
+  --gold3:#f2c842;
+  --saffron:#d98715;
+  --yellow:#fff0a0;
+  --yellow2:#fff7c7;
+  --blue:#385b8a;
+  --blue2:#6f8fb8;
+  --leaf:#4d815d;
+  --leaf2:#85ad78;
+  --red:#a44a43;
+  --orange:#b96d20;
+  --shadow:0 12px 30px rgba(105,75,12,.10);
+  --shadow2:0 8px 22px rgba(105,75,12,.07);
+  --radius:20px;
+}
+html,body{background:#fff9e8}
+body{
+  color:var(--ink);
+  background:
+    radial-gradient(circle at 90% 6%,rgba(255,219,83,.22),transparent 25%),
+    radial-gradient(circle at 10% 85%,rgba(118,167,117,.09),transparent 28%),
+    linear-gradient(180deg,#fffdf4 0%,#fff9e8 52%,#fff6df 100%);
+}
+.divine-ribbon{
+  position:fixed;left:280px;right:0;top:0;height:8px;z-index:35;
+  background:linear-gradient(90deg,#6b4a08 0%,#d69a14 18%,#ffe16a 48%,#d69a14 78%,#6b4a08 100%);
+  box-shadow:0 2px 10px rgba(123,82,7,.15);overflow:hidden;color:transparent
+}
+.divine-ribbon>*{display:none}
+.sacred-watermark{
+  position:fixed;right:4vw;bottom:3vh;width:min(30vw,370px);height:min(30vw,370px);
+  opacity:.075;pointer-events:none;z-index:0;filter:saturate(1.12);
+}
+.sidebar{
+  top:8px;height:calc(100vh - 8px);padding:18px 14px 16px;
+  background:
+    linear-gradient(180deg,rgba(255,253,244,.98),rgba(255,247,214,.98)),
+    repeating-linear-gradient(45deg,rgba(211,158,24,.025) 0 8px,transparent 8px 16px);
+  border-right:1px solid #e8cd7d;
+}
+.brand{
+  padding:8px 8px 16px;margin-bottom:10px;border-bottom:1px solid #eadba8;
+}
+.brand-mark{
+  width:64px;height:64px;border-radius:20px;
+  background:
+    radial-gradient(circle at 35% 28%,#9c7311 0,#6f4a07 55%,#4e3206 100%);
+  box-shadow:0 12px 28px rgba(108,73,8,.22),inset 0 0 0 1px rgba(255,224,105,.26);
+}
+.brand h1{
+  font-size:20px;line-height:1.05;color:#17283f;letter-spacing:-.025em
+}
+.brand p{font-size:11px;line-height:1.35;color:#7a6f56}
+.brand-blessing{
+  color:#9c6e08;font-size:10px;margin-top:6px;
+  display:inline-flex;padding:4px 7px;border-radius:999px;
+  background:#fff3b8;border:1px solid #eed77a
+}
+nav{gap:7px}
+nav button{
+  min-height:45px;padding:11px 13px;border-radius:13px;
+  font-size:13px;color:#2e4058;font-weight:800;
+}
+nav button:hover{
+  background:linear-gradient(135deg,#fff6c3,#fffdf0);
+  border-color:#e8cb68;transform:translateX(1px)
+}
+nav button.active{
+  color:#6c4906;
+  background:linear-gradient(135deg,#ffe98a 0%,#fff5ba 47%,#fffdf2 100%);
+  border:1px solid #dcae27;
+  box-shadow:0 9px 22px rgba(174,121,9,.12);
+}
+nav button.active:before{
+  width:4px;left:-1px;top:8px;bottom:8px;
+  background:linear-gradient(#b87308,#f1c63d,#71966e)
+}
+.side-footer{
+  background:rgba(255,247,213,.68);
+  border:1px solid #ead89a;border-radius:13px;padding:10px;margin-top:10px
+}
+.main{padding:26px 30px 28px}
+.topbar{
+  top:8px;margin:-26px -30px 20px;padding:22px 30px 16px;
+  background:linear-gradient(180deg,rgba(255,251,236,.96),rgba(255,249,229,.90));
+  border-bottom:1px solid #ead7a0;
+  box-shadow:0 6px 20px rgba(129,89,10,.045)
+}
+.topbar h2{font-size:31px;color:#17283f}
+.topbar p{color:#7a7e82}
+.user-chip,.cloud-btn{
+  color:#6d4a07;background:linear-gradient(180deg,#fffdf4,#fff3bf);
+  border-color:#e1c66f;box-shadow:0 5px 14px rgba(129,89,9,.07)
+}
+button{
+  border-color:#e4d3a6;background:linear-gradient(180deg,#fffefa,#fffaf0);
+  color:#26384f;box-shadow:0 5px 14px rgba(105,75,12,.055)
+}
+button:hover{border-color:#d6aa2d;box-shadow:0 8px 18px rgba(129,88,10,.10)}
+button.primary{
+  background:linear-gradient(135deg,#b47a08 0%,#d89b10 55%,#9d6704 100%);
+  color:#fff9df;border-color:#9d6804;
+  box-shadow:0 9px 22px rgba(134,89,8,.20)
+}
+.card,.kpi{
+  border:1px solid #ead9a8;
+  background:
+    linear-gradient(180deg,rgba(255,255,252,.98),rgba(255,252,241,.98));
+  box-shadow:var(--shadow2)
+}
+.card{
+  position:relative;overflow:hidden
+}
+.card:after{
+  content:"";position:absolute;inset:0 0 auto 0;height:3px;
+  background:linear-gradient(90deg,#d49b12,#f4d55b,#73966e,#557aa8);
+  opacity:.70
+}
+.kpi{
+  border-radius:17px;padding:17px 18px
+}
+.kpi:before{
+  width:5px;background:linear-gradient(180deg,#e2a91d 0,#f0ce56 55%,#6c936c 100%)
+}
+.kpi span{color:#7a6e54}
+.kpi b{color:#17283f;font-size:25px}
+.hero{
+  border:1px solid #e8ce78;
+  background:
+    radial-gradient(circle at 84% 23%,rgba(245,201,65,.20),transparent 23%),
+    linear-gradient(120deg,#fff5b9 0%,#fffbe5 36%,#fffdf8 72%,#f3f8ef 100%);
+  box-shadow:0 18px 38px rgba(115,79,9,.10);
+}
+.hero:before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:7px;
+  background:linear-gradient(#d0830e,#f3c84b,#5f8a65)
+}
+.hero:after{
+  content:"✦  🌿";right:30px;top:18px;font-size:36px;opacity:.11
+}
+.hero h3{color:#17283f}
+.hero-side{
+  background:
+    radial-gradient(circle at 50% 22%,rgba(255,226,103,.82),transparent 55%),
+    linear-gradient(180deg,#fff7c7,#fffdf1);
+  border-color:#e2c76f
+}
+.hero-side b{color:#916307}
+.badge.green{
+  color:#376a43;background:linear-gradient(180deg,#eef8ec,#e5f2df);border-color:#cbe3c7
+}
+.inventory-cards{gap:12px}
+.inv-card{
+  border:1px solid #e6d6a8;border-radius:15px;
+  background:linear-gradient(180deg,#fffef8,#fff9e8);
+  box-shadow:0 6px 16px rgba(103,72,10,.055)
+}
+.inv-card:nth-child(1){border-top:4px solid #5f9366;background:linear-gradient(180deg,#f7fff4,#fffdf7)}
+.inv-card:nth-child(2){border-top:4px solid #557daa;background:linear-gradient(180deg,#f5f9ff,#fffdf7)}
+.inv-card:nth-child(3){border-top:4px solid #d69513;background:linear-gradient(180deg,#fff9dc,#fffdf7)}
+.inv-card:nth-child(4){border-top:4px solid #b3740a;background:linear-gradient(180deg,#fff5c4,#fffdf7)}
+.module-tabs{
+  gap:9px;padding:4px 0 10px;margin-bottom:14px;
+  border-bottom:1px solid #ead8a0
+}
+.module-tabs button{
+  min-height:44px;padding:10px 14px;
+  background:linear-gradient(180deg,#fffef9,#fffaf0);
+  border:1px solid #e4d6b4;border-radius:13px;color:#26384f
+}
+.module-tabs button.active{
+  color:#6e4a05;
+  background:linear-gradient(135deg,#ffe783,#fff4b3);
+  border-color:#d8aa23;box-shadow:0 6px 15px rgba(146,96,8,.10)
+}
+.section-title{
+  background:linear-gradient(90deg,rgba(255,245,190,.36),transparent 70%);
+  border-radius:14px;padding:10px 12px
+}
+.section-title h3{color:#1d3048}
+.table-wrap{border-color:#e7d6a5;background:#fffef9}
+th{
+  background:linear-gradient(180deg,#fff3bb,#fff9df);
+  color:#705a2b;border-bottom-color:#e4ce84
+}
+td{background:rgba(255,255,252,.92)}
+tr:hover td{background:#fff9df}
+.alert{
+  background:linear-gradient(180deg,#fff9df,#fffdf2);
+  border-color:#e7c76c;color:#51472e
+}
+.alert.red{background:#fff0ec;border-color:#e6b3aa}
+.empty{
+  min-height:180px;display:grid;place-items:center;
+  color:#8b8f93;font-size:15px;
+  background:
+    radial-gradient(circle at 50% 50%,rgba(241,207,92,.08),transparent 55%);
+}
+.form-grid label{color:#4c5968}
+input,select,textarea{
+  border-color:#dfd0aa;background:#fffef9
+}
+input:focus,select:focus,textarea:focus{
+  border-color:#d09b15;outline:3px solid rgba(235,190,55,.18)
+}
+.modal-card{
+  background:linear-gradient(180deg,#fffef7,#fff8db);
+  border-color:#e2c66d
+}
+.cloud-login-card{
+  background:
+    radial-gradient(circle at 50% 0,rgba(255,218,77,.22),transparent 28%),
+    linear-gradient(180deg,#fffef7,#fff5c2);
+  border-color:#dfbd52
+}
+.login-emblem{
+  background:radial-gradient(circle at 35% 25%,#a77810,#6c4707 65%,#4f3104);
+  color:#ffeb91
+}
+@media(max-width:980px){
+  .divine-ribbon{left:0}
+  .sidebar{top:8px;height:auto}
+  .main{padding:14px}
+  .topbar{top:8px;margin:-14px -14px 16px;padding:15px 14px 13px}
+}
+@media(max-width:720px){
+  .sacred-watermark{width:72vw;height:72vw;right:-20vw;bottom:8vh;opacity:.045}
+  .brand{padding-top:4px}
+  .module-tabs{padding-bottom:8px}
+  .section-title{padding:9px}
+}

@@ -1,9 +1,9 @@
 {
-  "name": "Mahamaya Clinic OS Premium",
+  "name": "Mahamaya Clinic OS — Sunrise Gold",
   "short_name": "Mahamaya OS",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#fbf8ee",
-  "theme_color": "#9a6d17",
+  "background_color": "#fff9e8",
+  "theme_color": "#d79b11",
   "description": "Integrated clinic finance, billing, inventory, staff and audit system."
 }
