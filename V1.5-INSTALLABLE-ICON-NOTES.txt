@@ -1,0 +1,17 @@
+MAHAMAYA CLINIC OS V1.5 — PREMANAND DEVOTIONAL INSTALLABLE ICON
+
+- Premium Premanand Ji Maharaj devotional portrait integrated as real PWA icon.
+- 192x192, 512x512, maskable 192/512, Apple touch icon and favicon included.
+- Same portrait appears in app header branding.
+- Manifest remains standalone/installable.
+- Firebase authentication, admin email, Firestore rules and cloud-sync architecture were not changed.
+
+IMPORTANT AFTER GITHUB UPLOAD:
+1. Wait for GitHub Pages deployment.
+2. On phone, uninstall/remove the OLD home-screen shortcut/app once.
+3. Open fresh URL: https://drrajeshsao-cpu.github.io/MAHAMAYA-CLINIC-OS/?pwa=1.5
+4. Chrome menu > Add to Home screen / Install app.
+5. The new Premanand Ji Maharaj icon should now be used.
+
+Commit:
+Add V1.5 premium Premanand Ji Maharaj PWA icon and installable app identity

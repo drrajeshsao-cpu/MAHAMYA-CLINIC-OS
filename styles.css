@@ -537,3 +537,11 @@ img,svg,video,canvas{max-width:100%!important;height:auto}
   .reminder-item{display:grid}
   .reminder-actions{justify-items:start}
 }
+
+/* V1.5 devotional installed-app identity */
+.brand-mark.guru-brand{
+  padding:0!important;overflow:hidden!important;background:#d7a21e!important;
+  border:2px solid rgba(255,223,113,.72)!important;box-shadow:0 10px 28px rgba(113,77,8,.24)!important
+}
+.brand-mark.guru-brand img{width:100%!important;height:100%!important;object-fit:cover!important;display:block!important;border-radius:inherit!important}
+@media(max-width:720px){.brand-mark.guru-brand{width:58px!important;height:58px!important;flex:0 0 58px!important}}
