@@ -6,7 +6,23 @@
   <meta name="theme-color" content="#7b5a2d"/>
   <title>Mahamaya Clinic OS</title>
   <link rel="manifest" href="manifest.json"/>
-  <link rel="stylesheet" href="styles.css?v=1.2.2"/>
+  <link rel="stylesheet" href="styles.css?v=1.2.3"/>
+
+<script>
+(function(){
+  const FLAG='mc_os_v123_cache_cleaned';
+  if(!localStorage.getItem(FLAG)){
+    localStorage.setItem(FLAG,'1');
+    if('serviceWorker' in navigator){
+      navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(rs.map(r=>r.unregister()))).catch(()=>{});
+    }
+    if('caches' in window){
+      caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k)))).catch(()=>{});
+    }
+  }
+})();
+</script>
+
 </head>
 <body><div class="sacred-watermark" aria-hidden="true">
   <svg viewBox="0 0 420 420">
@@ -98,6 +114,6 @@
 
 <div id="toast" class="toast"></div>
 
-<script src="app.js?v=1.2.2"></script><script type="module" src="cloud-sync.js?v=1.2.2"></script>
+<script src="app.js?v=1.2.3"></script><script type="module" src="cloud-sync.js?v=1.2.3"></script>
 </body>
 </html>

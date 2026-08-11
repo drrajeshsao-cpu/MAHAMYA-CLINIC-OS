@@ -85,9 +85,9 @@ if(!configured){
     }
     onAuthStateChanged(auth,async u=>{
       if(!u){
-        status("local",isMobileBrowser?"Local mode • Tap Cloud to sign in":"Signed out • Local mode");
+        status("local","Local mode • Tap Cloud to sign in");
         if(chip)chip.textContent="🔒 Single Admin";
-        if(!isMobileBrowser)showLogin(auth);
+        document.querySelectorAll(".cloud-login-overlay").forEach(x=>x.remove());
         return
       }
       if(ADMIN_EMAIL&&u.email?.toLowerCase()!=ADMIN_EMAIL.toLowerCase()){await signOut(auth);alert("This account is not the configured admin.");return}
@@ -101,6 +101,18 @@ if(!configured){
     });
     const old=Storage.prototype.setItem;
     Storage.prototype.setItem=function(k,v){old.call(this,k,v);if(k===DB_KEY&&auth.currentUser&&!applying){clearTimeout(window.__mcSyncTimer);window.__mcSyncTimer=setTimeout(()=>uploadAll().catch(()=>status("error","Cloud unavailable • Local safe")),900)}};
-    if(cloudBtn)cloudBtn.onclick=async()=>{if(auth.currentUser){if(confirm("Cloud is connected. Sign out on this device?"))await signOut(auth)}else showLogin(auth)};
+    if(cloudBtn)cloudBtn.onclick=async()=>{
+      if(auth.currentUser){
+        if(confirm("Cloud is connected. Sign out on this device?")) await signOut(auth);
+      }else{
+        showLogin(auth);
+      }
+    };
   }catch(e){console.error(e);status("error","Cloud setup error • Local safe")}
 }
+
+
+// V1.2.3 hard safety: app must never start behind a stale overlay.
+document.addEventListener("DOMContentLoaded",()=>{
+  document.querySelectorAll(".cloud-login-overlay").forEach(x=>x.remove());
+});

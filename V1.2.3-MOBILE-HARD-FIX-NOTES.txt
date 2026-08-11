@@ -1,0 +1,15 @@
+MAHAMAYA CLINIC OS V1.2.3 — MOBILE HARD FIX
+
+Changes:
+- Login overlay NEVER auto-opens on page load.
+- Cloud login opens ONLY when user taps Cloud.
+- Any stale overlay is removed at startup.
+- One-time browser service-worker/cache cleanup included.
+- Mobile backdrop blur disabled.
+- Firebase persistent authentication remains.
+- Firestore secure /clinicOS path remains.
+- Single admin remains dr.raju2010@gmail.com.
+- No Firebase Console or Firestore Rules changes required.
+
+GitHub commit:
+Fix V1.2.3 mobile blur by removing automatic login overlay and clearing stale PWA cache
