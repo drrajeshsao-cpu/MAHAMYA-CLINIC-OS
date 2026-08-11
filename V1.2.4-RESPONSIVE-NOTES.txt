@@ -1,0 +1,28 @@
+MAHAMAYA CLINIC OS V1.2.4 — UNIVERSAL RESPONSIVE
+
+Target devices:
+- Small Android phones
+- Large phones
+- Tablets
+- Laptops
+- Desktop monitors
+
+Key fixes:
+- Eliminates document-level horizontal scrolling/cropping.
+- Mobile sidebar becomes a compact top header.
+- Navigation scrolls horizontally inside its own row.
+- Main dashboard always fits the viewport.
+- Top admin/cloud/quick-entry/backup actions form a clean 2-column mobile grid.
+- Hero section stacks correctly on phone.
+- Hero buttons never extend outside screen.
+- KPI/dashboard cards stack on phone and use 2 columns on tablet.
+- Inventory tabs scroll inside their own bar.
+- Tables scroll only inside their table container.
+- Forms become single-column on phone.
+- Typography scales down appropriately.
+- Sacred watermark remains subtle and does not affect layout.
+- Desktop dashboard remains full featured.
+- Firebase, admin login, Firestore path and cloud logic are unchanged.
+
+GitHub commit:
+Fix V1.2.4 universal responsive layout for mobile tablet laptop and desktop
