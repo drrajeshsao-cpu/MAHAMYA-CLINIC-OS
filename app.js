@@ -47,6 +47,56 @@ const seed={
   swarnaprashan:[], camps:[], assets:[], maintenance:[], closings:[],
   reminders:[], audit:[]
 };
+
+const BILLING_CATALOG = [
+  {id:'FB-CONSULT', group:'Consultation', name:'Consultation', min:0, max:200, presets:[0,100,200], defaultRate:200, note:'₹0 = Free / Seva'},
+  {id:'FB-FOLLOW', group:'Consultation', name:'Follow-up Consultation', min:0, max:100, presets:[0,50,100], defaultRate:100, note:'₹0 = Free / Seva'},
+  {id:'FB-DRESS', group:'Dressing & Wound Care', name:'Dressing / Re-dressing', min:30, max:300, presets:[30,50,100,200,300], defaultRate:200},
+  {id:'FB-PLASTER-MAT', group:'Plaster & Immobilisation', name:'Plaster with Material', min:300, max:2000, presets:[300,500,750,1000,1500,2000], defaultRate:1000},
+  {id:'FB-PLASTER-LARGE', group:'Plaster & Immobilisation', name:'Plaster without Material — Large', min:1000, max:1000, presets:[1000], defaultRate:1000},
+  {id:'FB-PLASTER-SHORT', group:'Plaster & Immobilisation', name:'Plaster without Material — Short', min:500, max:500, presets:[500], defaultRate:500},
+  {id:'FB-PLASTER-SMALL', group:'Plaster & Immobilisation', name:'Plaster without Material — Smallest', min:250, max:250, presets:[250], defaultRate:250},
+
+  {id:'FB-INJ-IMIDSC', group:'Injection / IV', name:'Injection IM / ID / SC — Administration', min:30, max:50, presets:[30,50], defaultRate:50},
+  {id:'FB-INJ-IVDIRECT', group:'Injection / IV', name:'Injection IV — Direct Administration', min:50, max:100, presets:[50,100], defaultRate:100},
+  {id:'FB-IV-CANNULA', group:'Injection / IV', name:'IV with Cannula — Administration', min:30, max:100, presets:[30,50,100], defaultRate:100},
+  {id:'FB-INJ-MVI', group:'Injection / IV', name:'Injection MVI', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-D3', group:'Injection / IV', name:'Injection Vitamin D3 60K Unit', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-DECA100', group:'Injection / IV', name:'Injection Deca-Durabolin 100 mg', min:100, max:500, presets:[100,200,300,400,500], defaultRate:300},
+  {id:'FB-INJ-DECA50', group:'Injection / IV', name:'Injection Deca-Durabolin 50 mg', min:100, max:500, presets:[100,200,300,400,500], defaultRate:300},
+  {id:'FB-INJ-DECA25', group:'Injection / IV', name:'Injection Deca-Durabolin 25 mg', min:100, max:400, presets:[100,200,300,400], defaultRate:200},
+  {id:'FB-INJ-CTX-DIRECT', group:'Injection / IV', name:'Injection Ceftriaxone 1 g — Direct IV', min:100, max:200, presets:[100,150,200], defaultRate:150},
+  {id:'FB-INJ-CTX-FIRST', group:'Injection / IV', name:'Injection Ceftriaxone 1 g — With Cannula, First Dose', min:100, max:300, presets:[100,150,200,300], defaultRate:200},
+  {id:'FB-INJ-CTX-FOLLOW', group:'Injection / IV', name:'Injection Ceftriaxone 1 g — Cannula Follow-up Dose', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-CTXSUL', group:'Injection / IV', name:'Injection Ceftriaxone + Sulbactam 1.5 g', min:100, max:300, presets:[100,200,300], defaultRate:200},
+  {id:'FB-INJ-CTXTAZO', group:'Injection / IV', name:'Injection Ceftriaxone + Tazobactam', min:50, max:300, presets:[50,100,150,200,300], defaultRate:200},
+  {id:'FB-INJ-AMK500', group:'Injection / IV', name:'Injection Amikacin 500 mg', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-AMK250', group:'Injection / IV', name:'Injection Amikacin 250 mg', min:50, max:150, presets:[50,100,150], defaultRate:100},
+  {id:'FB-INJ-GENTA', group:'Injection / IV', name:'Injection Gentamicin 2 ml', min:50, max:150, presets:[50,100,150], defaultRate:100},
+  {id:'FB-INJ-DERIPHY', group:'Injection / IV', name:'Injection Deriphyllin 2 ml', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-DEXA', group:'Injection / IV', name:'Injection Dexamethasone 2 ml', min:100, max:200, presets:[100,150,200], defaultRate:150},
+  {id:'FB-INJ-AVIL', group:'Injection / IV', name:'Injection Avil 2 ml', min:100, max:200, presets:[100,150,200], defaultRate:150},
+  {id:'FB-INJ-LASIX', group:'Injection / IV', name:'Injection Lasix 2 ml', min:100, max:200, presets:[100,150,200], defaultRate:150},
+  {id:'FB-INJ-PANTO', group:'Injection / IV', name:'Injection Pantoprazole — 1 Vial', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-ONDAN', group:'Injection / IV', name:'Injection Ondansetron 2 ml', min:100, max:200, presets:[100,150,200], defaultRate:150},
+  {id:'FB-INJ-DICLO', group:'Injection / IV', name:'Injection Diclofenac Aqueous 1 ml', min:50, max:150, presets:[50,100,150], defaultRate:100},
+  {id:'FB-INJ-DROTA', group:'Injection / IV', name:'Injection Drotaverine 2 ml', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-BLUEVIT', group:'Injection / IV', name:'Injection Bluevit (B1+B6+B12) 2 ml', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-XYLO', group:'Injection / IV', name:'Injection Xylocaine', min:50, max:100, presets:[50,100], defaultRate:100},
+  {id:'FB-NEB-ASTH', group:'Nebulization', name:'Nebulization with Asthalin', min:30, max:50, presets:[30,50], defaultRate:50},
+  {id:'FB-NEB-DUO', group:'Nebulization', name:'Nebulization with Duolin', min:50, max:100, presets:[50,100], defaultRate:100},
+  {id:'FB-NEB-BUDE', group:'Nebulization', name:'Nebulization with Budecort', min:50, max:100, presets:[50,100], defaultRate:100},
+  {id:'FB-NEB-DUOBUDE', group:'Nebulization', name:'Nebulization with Duolin + Budecort', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-TT', group:'Injection / IV', name:'Tetanus Toxoid 0.5 ml', min:50, max:100, presets:[50,100], defaultRate:100},
+  {id:'FB-CANNULA-ONLY', group:'Injection / IV', name:'IV Cannula Only', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-CANNULA-FIX', group:'Injection / IV', name:'IV Cannula Fixation — Without Cannula', min:50, max:100, presets:[50,100], defaultRate:100},
+  {id:'FB-IV-MEDONLY', group:'Injection / IV', name:'Only IV Medication Administration', min:50, max:100, presets:[50,100], defaultRate:100},
+  {id:'FB-FBR', group:'Minor Procedure', name:'Foreign Body Removal', min:50, max:300, presets:[50,100,150,200,300], defaultRate:200},
+
+  {id:'FB-PATH', group:'Pathology', name:'Pathology Test — Custom Test Name & Amount', custom:true, min:0, max:null, presets:[], defaultRate:0},
+  {id:'FB-MED', group:'Medicines', name:'Medicine / Pharmacy — Total Amount', custom:true, min:0, max:null, presets:[], defaultRate:0}
+];
+
 let db=load();
 
 function load(){
@@ -593,28 +643,141 @@ function quickEntry(){
   bindModalActions();
 }
 function billModal(){
-  const opts=db.services.map(s=>`<option value="${s.id}">${esc(s.group)} — ${esc(s.name)} (${money(s.rate)})</option>`).join('');
-  modal('New Patient Bill',`<div class="form-grid">
+  const opts=BILLING_CATALOG.map(s=>{
+    const range=s.max==null?'Enter amount':s.min===s.max?money(s.min):`${money(s.min)}–${money(s.max)}`;
+    return `<option value="${s.id}">${esc(s.group)} — ${esc(s.name)} (${range})</option>`;
+  }).join('');
+
+  modal('New Patient Bill',`<div class="form-grid flexible-billing-form">
     <label>Date<input id="bDate" type="date" value="${today()}"></label>
     <label>Patient Name<input id="bPatient" placeholder="Patient name"></label>
-    <label class="full">Service<select id="bService">${opts}</select></label>
-    <label>Qty<input id="bQty" type="number" value="1" min="1"></label>
-    <label>Custom Rate<input id="bRate" type="number" value="${db.services[0].rate}"></label>
-    <label>Cash<input id="bCash" type="number" value="0"></label>
-    <label>UPI<input id="bUpi" type="number" value="0"></label>
-    <label>Card<input id="bCard" type="number" value="0"></label>
-    <label>Bank<input id="bBank" type="number" value="0"></label>
-    <label>Advance Adjusted<input id="bAdvance" type="number" value="0"></label>
+
+    <label class="full">Service
+      <select id="bService">${opts}</select>
+    </label>
+
+    <div id="billingRangeCard" class="full billing-range-card"></div>
+
+    <label id="bCustomNameWrap" class="full hidden">Test / Item Name
+      <input id="bCustomName" placeholder="e.g. CBC / LFT / RFT / Total medicines">
+    </label>
+
+    <label>Qty<input id="bQty" type="number" value="1" min="1" step="1"></label>
+    <label>Selected Rate ₹
+      <input id="bRate" type="number" min="0" step="1">
+    </label>
+
+    <label class="full">Rate Decision / Concession Note
+      <select id="bRateReason">
+        <option>Standard clinic rate</option>
+        <option>Compassionate concession</option>
+        <option>Financial hardship concession</option>
+        <option>Seva / Free service</option>
+        <option>Procedure complexity / material use</option>
+        <option>Custom clinical/administrative reason</option>
+      </select>
+    </label>
+
+    <label class="full">Optional Rate Note
+      <input id="bRateNote" placeholder="Optional — brief reason; avoid unnecessary sensitive financial details">
+    </label>
+
+    <div class="full bill-live-total">
+      <span>Billable total</span><b id="bLiveTotal">₹0</b>
+    </div>
+
+    <label>Cash<input id="bCash" type="number" value="0" min="0"></label>
+    <label>UPI<input id="bUpi" type="number" value="0" min="0"></label>
+    <label>Card<input id="bCard" type="number" value="0" min="0"></label>
+    <label>Bank<input id="bBank" type="number" value="0" min="0"></label>
+    <label>Advance Adjusted<input id="bAdvance" type="number" value="0" min="0"></label>
     <label>Service / Procedure By<input id="bBy" placeholder="Dr / Staff"></label>
     <label>Payment Received By<input id="bPayBy" placeholder="Staff"></label>
     <label class="full">Notes<textarea id="bNotes"></textarea></label>
     <div class="full"><button class="primary" id="saveBillBtn">Save Bill</button></div>
-  </div>`,'Use custom rate only when needed. Split payment is supported.');
-  const sync=()=>{const s=db.services.find(x=>x.id===$('#bService').value);if(s)$('#bRate').value=s.rate};
-  $('#bService').onchange=sync;
+  </div>`,
+  'Choose any rate within the approved minimum–maximum range. ₹0 is available only where Free / Seva is configured. Pathology and Medicine use custom amount entry.');
+
+  const getService=()=>BILLING_CATALOG.find(x=>x.id===$('#bService').value);
+
+  const nearestMid=(s)=>{
+    if(s.max==null) return s.defaultRate||0;
+    if(s.min===s.max) return s.min;
+    return Math.round((s.min+s.max)/2);
+  };
+
+  const renderRateUI=()=>{
+    const s=getService(); if(!s)return;
+    const card=$('#billingRangeCard');
+    const custom=(s.id==='FB-PATH'||s.id==='FB-MED');
+    $('#bCustomNameWrap').classList.toggle('hidden',!custom);
+    $('#bCustomName').placeholder=s.id==='FB-PATH'?'e.g. CBC / LFT / RFT / HbA1c':'Optional medicine / pharmacy note';
+
+    if(s.max==null){
+      card.innerHTML=`<div class="range-head"><div><b>${esc(s.name)}</b><small>Custom amount billing</small></div><span class="range-badge">₹0+</span></div>
+      <div class="rate-guidance">Enter the actual total amount for this bill.</div>`;
+      $('#bRate').min='0'; $('#bRate').removeAttribute('max'); $('#bRate').value=s.defaultRate||0;
+    }else{
+      const mid=nearestMid(s);
+      const presetBtns=[...new Set([s.min,...(s.presets||[]),mid,s.max])].sort((a,b)=>a-b).map(v=>`<button type="button" class="rate-chip ${v===s.defaultRate?'recommended':''}" data-rate="${v}">${v===0?'₹0 • Seva':money(v)}</button>`).join('');
+      card.innerHTML=`<div class="range-head"><div><b>${esc(s.name)}</b><small>Approved billing range</small></div><span class="range-badge">${s.min===s.max?money(s.min):`${money(s.min)} – ${money(s.max)}`}</span></div>
+      <div class="rate-guidance">Any whole-rupee amount inside this range can be selected. Quick choices are shown below.</div>
+      <div class="rate-chip-row">${presetBtns}</div>
+      ${s.note?`<div class="rate-note">${esc(s.note)}</div>`:''}`;
+      $('#bRate').min=String(s.min); $('#bRate').max=String(s.max); $('#bRate').value=s.defaultRate??mid;
+      card.querySelectorAll('[data-rate]').forEach(btn=>btn.onclick=()=>{$('#bRate').value=btn.dataset.rate;validateRate(false);updateBillTotal()});
+    }
+    updateBillTotal();
+  };
+
+  const validateRate=(showAlert=true)=>{
+    const s=getService(); if(!s)return true;
+    let r=Number($('#bRate').value||0);
+    if(s.max==null){
+      if(r<0){$('#bRate').value=0;if(showAlert)alert('Amount cannot be negative.');return false}
+      return true;
+    }
+    if(r<s.min||r>s.max){
+      const fixed=Math.min(s.max,Math.max(s.min,r));
+      $('#bRate').value=fixed;
+      if(showAlert)alert(`Rate must remain between ${money(s.min)} and ${money(s.max)} for this service.`);
+      return false;
+    }
+    return true;
+  };
+
+  const updateBillTotal=()=>{
+    const qty=Math.max(1,Number($('#bQty').value||1));
+    const rate=Math.max(0,Number($('#bRate').value||0));
+    $('#bLiveTotal').textContent=money(qty*rate);
+  };
+
+  $('#bService').onchange=renderRateUI;
+  $('#bRate').oninput=updateBillTotal;
+  $('#bRate').onchange=()=>{validateRate(true);updateBillTotal()};
+  $('#bQty').oninput=updateBillTotal;
+  renderRateUI();
+
   $('#saveBillBtn').onclick=()=>{
-    const s=db.services.find(x=>x.id===$('#bService').value), qty=Number($('#bQty').value||1), rate=Number($('#bRate').value||0), amount=qty*rate;
-    const b={id:uid('BILL'),date:$('#bDate').value,patient:$('#bPatient').value||'Walk-in',items:[{serviceId:s.id,group:s.group,name:s.name,qty,rate,amount}],total:amount,cash:Number($('#bCash').value||0),upi:Number($('#bUpi').value||0),card:Number($('#bCard').value||0),bank:Number($('#bBank').value||0),advance:Number($('#bAdvance').value||0),serviceBy:$('#bBy').value,paymentBy:$('#bPayBy').value,notes:$('#bNotes').value};
+    const s=getService(); if(!s)return;
+    if(!validateRate(true)) return;
+    const qty=Math.max(1,Number($('#bQty').value||1));
+    const rate=Number($('#bRate').value||0);
+    const amount=qty*rate;
+    const customName=$('#bCustomName').value.trim();
+    if((s.id==='FB-PATH')&&!customName)return alert('Please enter pathology test name.');
+    const finalName=customName?`${s.name}: ${customName}`:s.name;
+    const b={
+      id:uid('BILL'),date:$('#bDate').value,patient:$('#bPatient').value||'Walk-in',
+      items:[{
+        serviceId:s.id,group:s.group,name:finalName,qty,rate,amount,
+        rateMin:s.min,rateMax:s.max,rateReason:$('#bRateReason').value,rateNote:$('#bRateNote').value
+      }],
+      total:amount,
+      cash:Number($('#bCash').value||0),upi:Number($('#bUpi').value||0),card:Number($('#bCard').value||0),
+      bank:Number($('#bBank').value||0),advance:Number($('#bAdvance').value||0),
+      serviceBy:$('#bBy').value,paymentBy:$('#bPayBy').value,notes:$('#bNotes').value
+    };
     db.bills.push(b); save(`Bill ${b.id} created for ${b.patient}`); closeModal();render();toast('Bill saved');
   };
 }

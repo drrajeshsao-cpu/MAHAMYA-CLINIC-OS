@@ -1,0 +1,23 @@
+MAHAMAYA CLINIC OS V1.7 — FLEXIBLE COMPASSIONATE BILLING
+Build: 2026-08-12 23:56 IST
+
+What changed
+• Quick Billing now uses service-specific approved minimum–maximum ranges.
+• Any whole-rupee rate within the configured range can be selected.
+• Quick rate chips remain available for fast billing.
+• ₹0 is permitted only for services whose range includes ₹0 (Consultation / Follow-up Seva).
+• Rate is automatically clamped if a value outside the approved range is entered.
+• Optional Rate Decision / Concession Note is stored with the bill.
+• Pathology: editable test name + custom amount.
+• Medicines: total medicine/pharmacy amount.
+• Previous bills, finance records, login, Firebase/cloud and backup architecture preserved.
+
+Examples
+Ceftriaxone 1 g Direct IV: minimum ₹100, maximum ₹200.
+You may bill ₹100, ₹120, ₹150, ₹180 or ₹200 — but not below ₹100 or above ₹200.
+
+Consultation: ₹0–₹200.
+Follow-up: ₹0–₹100.
+
+GitHub commit message:
+Add V1.7 flexible compassionate billing ranges quick rate selector pathology custom billing and medicine totals

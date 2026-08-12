@@ -615,3 +615,22 @@ img,svg,video,canvas{max-width:100%!important;height:auto}
  body.statement-printing .kpis{grid-template-columns:repeat(4,1fr)!important}
  body.statement-printing .grid2{grid-template-columns:1fr 1fr!important}
 }
+
+/* V1.7 Flexible Compassionate Billing */
+.flexible-billing-form .hidden{display:none!important}
+.billing-range-card{border:1px solid #ead59b;background:linear-gradient(135deg,#fffaf0,#fffef8);border-radius:15px;padding:13px}
+.range-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.range-head>div{display:flex;flex-direction:column;gap:3px}
+.range-head small{color:#7b7b71;font-weight:600}
+.range-badge{background:#fff0bf;border:1px solid #dfbd58;color:#785500;border-radius:999px;padding:7px 11px;font-weight:900;white-space:nowrap}
+.rate-guidance{color:#6f756f;font-size:12px;margin:10px 0}
+.rate-chip-row{display:flex;gap:7px;flex-wrap:wrap}
+.rate-chip{border:1px solid #dfc874;background:#fff;color:#694b00;border-radius:10px;padding:8px 11px;font-weight:800;cursor:pointer}
+.rate-chip:hover,.rate-chip.recommended{background:#f8df92}
+.rate-note{margin-top:9px;padding:7px 9px;border-radius:9px;background:#eef8ef;color:#3d6843;font-weight:700;font-size:12px}
+.bill-live-total{display:flex;justify-content:space-between;align-items:center;border:1px solid #d9c98c;background:#fff8dc;border-radius:13px;padding:11px 13px}
+.bill-live-total b{font-size:22px;color:#6d5100}
+@media(max-width:640px){
+  .range-head{align-items:flex-start;flex-direction:column}
+  .rate-chip{flex:1 1 calc(50% - 7px)}
+}
