@@ -1,0 +1,15 @@
+MAHAMAYA CLINIC OS — V1.6
+Build: 2026-08-12
+Last updated: 12 Aug 2026 • 13:15 IST
+
+WHAT CHANGED
+1. Visible version/build badge.
+2. Visible Last Updated timestamp chip.
+3. New bank-style Statements module.
+4. 1 day through 1 year + custom date range.
+5. Print / Save PDF, CSV export, WhatsApp/system share.
+6. Responsive dashboard polish across mobile/tablet/laptop/desktop.
+7. Existing Firebase Authentication and cloud-sync code preserved.
+
+GITHUB COMMIT
+Upgrade Mahamaya Clinic OS to V1.6 with stable financial statements and version badge

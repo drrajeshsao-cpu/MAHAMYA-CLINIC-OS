@@ -1,11 +1,11 @@
 {
-  "name": "Mahamaya Clinic OS — Seva & Finance",
+  "name": "Mahamaya Clinic OS — Stable Statements V1.6",
   "short_name": "Mahamaya OS",
-  "start_url": "./?pwa=1.5",
+  "start_url": "./?pwa=1.6",
   "display": "standalone",
   "background_color": "#fff9e8",
   "theme_color": "#9d6b05",
-  "description": "Mahamaya Clinic OS for clinic finance, billing, inventory, reminders and daily audit.",
+  "description": "Mahamaya Clinic OS V1.6 for clinic finance, billing, inventory, cloud sync, reminders, daily audit and bank-style financial statements.",
   "scope": "./",
   "display_override": [
     "standalone",

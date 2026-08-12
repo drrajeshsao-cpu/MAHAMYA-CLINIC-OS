@@ -84,6 +84,7 @@ const pageMeta={
  assets:['Assets & Maintenance','Clinical equipment, furniture, interiors, repair, AMC and service history.'],
  closing:['Daily Closing','Cash, UPI, expenses and daily reconciliation.'],
  reports:['Reports','Operational summaries and management reports.'],
+ statement:['Statements','Bank-style clinic financial history for any selected period.'],
  settings:['Settings','Clinic defaults and data management.']
 };
 let currentView='dashboard';
@@ -191,6 +192,13 @@ function dashboard(){
     </div>
   </div>
 
+  <div class="dashboard-shortcuts">
+    <button data-viewjump="statement"><span>📑</span><b>Financial Statement</b><small>1 day → 1 year • PDF • Share</small></button>
+    <button data-viewjump="reports"><span>📊</span><b>Reports</b><small>Monthly operational summary</small></button>
+    <button data-action="bill"><span>🧾</span><b>Quick Bill</b><small>Fast patient billing</small></button>
+    <button data-action="reminder"><span>⏰</span><b>Reminder</b><small>Payments • stock • tasks</small></button>
+  </div>
+
   <div class="kpis">
     <div class="kpi"><span>Today Billing</span><b>${money(billed)}</b><small>${bills.length} bills</small></div>
     <div class="kpi"><span>Today Received</span><b>${money(received)}</b><small>Bill + other income</small></div>
@@ -227,7 +235,7 @@ function dashboard(){
       ${renderReminderList(upcomingReminders(6))}
     </div>
     <div class="card">
-      <div class="section-title"><div><h3>What Needs Attention?</h3><div class="muted">Immediate actionable items</div></div><button class="small" data-viewjump="reports">Reports</button></div>
+      <div class="section-title"><div><h3>What Needs Attention?</h3><div class="muted">Immediate actionable items</div></div><div class="actions"><button class="small" data-viewjump="statement">📑 Statement</button><button class="small" data-viewjump="reports">Reports</button></div></div>
       <div class="alert-list">
         <div class="alert ${low?'red':''}">${low} low/out-of-stock item(s)</div>
         <div class="alert ${counts.overdue?'red':''}">${counts.overdue} reminder(s) overdue</div>
@@ -395,6 +403,135 @@ function reports(){
     <div class="card"><h3>Stock Value</h3>${inventoryValueReport()}</div>
   </div>`;
 }
+let statementPresetDays=30;
+function dateShift(days){
+  const d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()+days);
+  return d.toISOString().slice(0,10);
+}
+function selectedStatementRange(){
+  const from=$('#stmtFrom')?.value||dateShift(-(statementPresetDays-1));
+  const to=$('#stmtTo')?.value||today();
+  return {from,to};
+}
+function inRange(x,from,to){
+  const d=String(x.date||'').slice(0,10);
+  return d && d>=from && d<=to;
+}
+function statementTransactions(from,to){
+  const rows=[];
+  db.bills.filter(x=>inRange(x,from,to)).forEach(b=>{
+    const received=billReceived(b), due=billDue(b);
+    rows.push({date:b.date,type:'Patient Bill',ref:b.id,party:b.patient||'Patient',category:(b.items||[]).map(i=>i.group).filter(Boolean).join(', ')||'Clinical Service',inflow:received,outflow:0,due,note:b.notes||'',mode:['Cash','UPI','Card','Bank','Advance'].filter(k=>Number(b[k.toLowerCase()]||0)>0).join(' + ')});
+  });
+  db.incomes.filter(x=>inRange(x,from,to)).forEach(x=>{
+    rows.push({date:x.date,type:'Other Income',ref:x.id,party:x.source||'Income',category:x.category||'Other Income',inflow:Number(x.amount||0),outflow:0,due:0,note:x.notes||'',mode:x.mode||''});
+  });
+  db.expenses.filter(x=>inRange(x,from,to)).forEach(x=>{
+    rows.push({date:x.date,type:'Expense',ref:x.id,party:x.paidTo||x.name||'Expense',category:x.category||'Expense',inflow:0,outflow:Number(x.amount||0),due:x.status==='Pending'?Number(x.amount||0):0,note:x.notes||'',mode:x.mode||''});
+  });
+  return rows.sort((a,b)=>String(a.date).localeCompare(String(b.date))||String(a.type).localeCompare(String(b.type)));
+}
+function stmtPeriodLabel(days){
+  return ({1:'1 Day',7:'1 Week',14:'2 Weeks',21:'3 Weeks',30:'1 Month',60:'2 Months',90:'3 Months',180:'6 Months',270:'9 Months',365:'1 Year'})[days]||`${days} Days`;
+}
+function statement(){
+  const to=today(), from=dateShift(-(statementPresetDays-1));
+  return `
+  <div class="statement-hero card">
+    <div>
+      <span class="badge green">Financial History & Audit</span>
+      <h3>Clinic Financial Statement</h3>
+      <p class="muted">Bank-statement style view of patient receipts, other income and expenses. Select a period, review the ledger, then print/save PDF or share a summary.</p>
+    </div>
+    <div class="statement-version">Mahamaya Clinic OS • V1.6</div>
+  </div>
+
+  <div class="card statement-controls">
+    <div class="section-title"><div><h3>Select Period</h3><div class="muted">Quick intervals or custom From–To dates</div></div><span class="badge orange" id="stmtPeriodBadge">${stmtPeriodLabel(statementPresetDays)}</span></div>
+    <div class="statement-presets">
+      ${[1,7,14,21,30,60,90,180,270,365].map(d=>`<button class="small ${d===statementPresetDays?'active':''}" data-stmtdays="${d}">${stmtPeriodLabel(d)}</button>`).join('')}
+    </div>
+    <div class="form-grid statement-date-grid">
+      <label>From<input id="stmtFrom" type="date" value="${from}"></label>
+      <label>To<input id="stmtTo" type="date" value="${to}"></label>
+      <div class="full actions">
+        <button class="primary" id="stmtGenerateBtn">Generate Statement</button>
+        <button id="stmtPrintBtn">🖨 Print / Save PDF</button>
+        <button id="stmtCsvBtn">⬇ CSV</button>
+        <button id="stmtShareBtn">🟢 WhatsApp / Share</button>
+      </div>
+    </div>
+  </div>
+  <div id="statementOutput">${statementOutput(from,to)}</div>`;
+}
+function statementOutput(from,to){
+  const rows=statementTransactions(from,to);
+  const inflow=sum(rows,x=>x.inflow), outflow=sum(rows,x=>x.outflow), due=sum(rows,x=>x.due), net=inflow-outflow;
+  const bills=db.bills.filter(x=>inRange(x,from,to));
+  const expenses=db.expenses.filter(x=>inRange(x,from,to));
+  const modes={Cash:0,UPI:0,Card:0,Bank:0,Advance:0};
+  bills.forEach(x=>Object.keys(modes).forEach(k=>modes[k]+=Number(x[k.toLowerCase()]||0)));
+  db.incomes.filter(x=>inRange(x,from,to)).forEach(x=>{if(modes[x.mode]!=null)modes[x.mode]+=Number(x.amount||0)});
+  return `
+    <div class="statement-print-head">
+      <div><b>${esc(db.settings.clinicName)}</b><br><small>${esc(db.settings.owner||'')}</small></div>
+      <div><b>Financial Statement</b><br><small>${formatDate(from)} → ${formatDate(to)}</small></div>
+    </div>
+    <div class="kpis statement-kpis">
+      <div class="kpi"><span>Total Received</span><b>${money(inflow)}</b><small>${bills.length} patient bill(s) + other income</small></div>
+      <div class="kpi"><span>Total Expenses</span><b>${money(outflow)}</b><small>${expenses.length} expense entry/entries</small></div>
+      <div class="kpi"><span>Net Operational</span><b>${money(net)}</b><small>${net>=0?'Surplus':'Deficit'} in selected period</small></div>
+      <div class="kpi"><span>Recorded Due</span><b>${money(due)}</b><small>Patient/pending amount context</small></div>
+    </div>
+    <div class="grid2 statement-summary-grid">
+      <div class="card"><h3>Collection Modes</h3><div class="metric-list">${Object.entries(modes).map(([k,v])=>`<div class="metric-row"><span>${k}</span><b>${money(v)}</b></div>`).join('')}</div></div>
+      <div class="card"><h3>Period Snapshot</h3><div class="metric-list">
+        <div class="metric-row"><span>From</span><b>${formatDate(from)}</b></div>
+        <div class="metric-row"><span>To</span><b>${formatDate(to)}</b></div>
+        <div class="metric-row"><span>Transactions</span><b>${rows.length}</b></div>
+        <div class="metric-row"><span>Generated</span><b>${new Date().toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'})}</b></div>
+      </div></div>
+    </div>
+    <div class="card statement-ledger-card">
+      <div class="section-title"><div><h3>Date-wise Ledger</h3><div class="muted">Chronological receipts and expenses</div></div><span class="badge">${rows.length} entries</span></div>
+      ${rows.length?`<div class="table-wrap statement-table"><table><thead><tr><th>Date</th><th>Type / Ref</th><th>Party / Patient</th><th>Category</th><th>Mode</th><th>Received</th><th>Expense</th><th>Due</th><th>Note</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${formatDate(r.date)}</td><td><b>${esc(r.type)}</b><br><small>${esc(r.ref||'')}</small></td><td>${esc(r.party)}</td><td>${esc(r.category)}</td><td>${esc(r.mode||'-')}</td><td class="money-in">${r.inflow?money(r.inflow):'-'}</td><td class="money-out">${r.outflow?money(r.outflow):'-'}</td><td>${r.due?money(r.due):'-'}</td><td>${esc(r.note||'')}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No transactions in this period.</div>'}
+    </div>`;
+}
+function refreshStatement(){
+  const {from,to}=selectedStatementRange();
+  if(from>to){alert('From date cannot be after To date.');return}
+  $('#statementOutput').innerHTML=statementOutput(from,to);
+  $('#stmtPeriodBadge').textContent=`${formatDate(from)} → ${formatDate(to)}`;
+}
+function statementShareText(){
+  const {from,to}=selectedStatementRange(), rows=statementTransactions(from,to);
+  const inflow=sum(rows,x=>x.inflow), outflow=sum(rows,x=>x.outflow), due=sum(rows,x=>x.due), net=inflow-outflow;
+  return `${db.settings.clinicName} — Financial Statement
+Period: ${formatDate(from)} to ${formatDate(to)}
+Total received: ${money(inflow)}
+Total expenses: ${money(outflow)}
+Net operational: ${money(net)}
+Recorded due: ${money(due)}
+Transactions: ${rows.length}
+Generated from Mahamaya Clinic OS V1.6`;
+}
+function shareStatement(){
+  const text=statementShareText();
+  if(navigator.share){navigator.share({title:'Mahamaya Clinic Financial Statement',text}).catch(()=>{});return}
+  window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+}
+function csvEscape(v){return `"${String(v??'').replaceAll('"','""')}"`}
+function downloadStatementCSV(){
+  const {from,to}=selectedStatementRange(), rows=statementTransactions(from,to);
+  const data=[['Date','Type','Reference','Party/Patient','Category','Mode','Received','Expense','Due','Note'],...rows.map(r=>[r.date,r.type,r.ref,r.party,r.category,r.mode,r.inflow,r.outflow,r.due,r.note])];
+  const blob=new Blob([data.map(row=>row.map(csvEscape).join(',')).join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Mahamaya-Clinic-Statement-${from}-to-${to}.csv`;a.click();URL.revokeObjectURL(a.href);toast('Statement CSV downloaded');
+}
+function printStatement(){
+  document.body.classList.add('statement-printing');
+  setTimeout(()=>{window.print();setTimeout(()=>document.body.classList.remove('statement-printing'),400)},40);
+}
+
 function settings(){
   return `<div class="grid2">
     <div class="card">
@@ -414,11 +551,11 @@ function settings(){
         <button id="restoreBtn">Restore JSON</button>
         <button class="danger" id="resetBtn">Reset Local Data</button>
       </div>
-      <p class="muted">This foundation stores data locally in the browser. Use Backup JSON regularly until cloud sync is added.</p>
+      <p class="muted">Local-first safety remains active. Cloud sync/login configuration is preserved. Keep regular JSON backups for independent recovery.</p>
     </div>
   </div>`;
 }
-const views={dashboard,billing,income,expenses,inventory,vendors,staff,swarnaprashan,camps,assets,closing,reports,settings};
+const views={dashboard,billing,income,expenses,inventory,vendors,staff,swarnaprashan,camps,assets,closing,reports,statement,settings};
 
 function table(rows,heads,rowfn){
   if(!rows.length)return '<div class="empty">No records yet.</div>';
@@ -660,6 +797,17 @@ function bindView(){
   $('[data-invtab]').forEach(b=>b.onclick=()=>{inventoryTab=b.dataset.invtab;render()});
   $('[data-remdone]').forEach(b=>b.onclick=()=>{const id=b.dataset.remdone; const r=(db.reminders||[]).find(x=>x.id===id); if(r){r.done=true;r.doneAt=nowISO();save(`Reminder ${r.title} completed`);render();toast('Reminder marked done')}});
   $('[data-remdelete]').forEach(b=>b.onclick=()=>{const id=b.dataset.remdelete; const r=(db.reminders||[]).find(x=>x.id===id); if(confirm('Delete this reminder?')){db.reminders=(db.reminders||[]).filter(x=>x.id!==id);save(`Reminder ${r?.title||id} deleted`);render();toast('Reminder deleted')}});
+  $$('[data-stmtdays]').forEach(b=>b.onclick=()=>{
+    statementPresetDays=Number(b.dataset.stmtdays||30);
+    const to=today(),from=dateShift(-(statementPresetDays-1));
+    $('#stmtFrom').value=from;$('#stmtTo').value=to;
+    $$('[data-stmtdays]').forEach(x=>x.classList.toggle('active',x===b));
+    refreshStatement();
+  });
+  if($('#stmtGenerateBtn')) $('#stmtGenerateBtn').onclick=refreshStatement;
+  if($('#stmtPrintBtn')) $('#stmtPrintBtn').onclick=printStatement;
+  if($('#stmtCsvBtn')) $('#stmtCsvBtn').onclick=downloadStatementCSV;
+  if($('#stmtShareBtn')) $('#stmtShareBtn').onclick=shareStatement;
   if($('#closeDayBtn')) $('#closeDayBtn').onclick=closeDay;
   if($('#saveSettingsBtn')) $('#saveSettingsBtn').onclick=()=>{db.settings.clinicName=$('#setClinicName').value;db.settings.owner=$('#setOwner').value;db.settings.consultationRate=Number($('#setConsult').value||0);db.settings.followupRate=Number($('#setFollow').value||0);save('Clinic settings updated');render();toast('Settings saved')};
   if($('#settingsBackupBtn')) $('#settingsBackupBtn').onclick=backup;

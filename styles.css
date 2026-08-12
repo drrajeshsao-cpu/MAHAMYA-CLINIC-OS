@@ -545,3 +545,73 @@ img,svg,video,canvas{max-width:100%!important;height:auto}
 }
 .brand-mark.guru-brand img{width:100%!important;height:100%!important;object-fit:cover!important;display:block!important;border-radius:inherit!important}
 @media(max-width:720px){.brand-mark.guru-brand{width:58px!important;height:58px!important;flex:0 0 58px!important}}
+
+/* ===== Mahamaya Clinic OS V1.6 — Stable Statements & Version Identity ===== */
+.app-version-badge{display:inline-flex;align-items:center;gap:5px;margin-top:6px;padding:4px 8px;border:1px solid #e7c766;border-radius:999px;background:#fff8d9;color:#785708;font-size:10px;font-weight:900;white-space:nowrap}
+.app-version-badge span{opacity:.55}
+.update-chip{display:inline-flex;align-items:center;padding:9px 11px;border:1px solid #ead58f;border-radius:999px;background:#fffbed;color:#76560b;font-size:11px;font-weight:850;white-space:nowrap}
+.dashboard-shortcuts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:-2px 0 18px}
+.dashboard-shortcuts button{min-width:0;text-align:left;background:linear-gradient(145deg,#fff,#fff9e9);border-color:#eadcad;border-radius:15px;padding:13px}
+.dashboard-shortcuts span{display:block;font-size:19px;margin-bottom:5px}.dashboard-shortcuts b{display:block}.dashboard-shortcuts small{display:block;color:var(--muted);font-size:10px;margin-top:3px}
+.statement-hero{display:flex;justify-content:space-between;gap:20px;align-items:center;background:linear-gradient(135deg,#fff7d9,#f7fbef);border-color:#e8cf76;margin-bottom:14px}
+.statement-hero h3{font-size:25px;margin:7px 0}.statement-version{font-size:11px;font-weight:900;color:#82620e;padding:8px 10px;border-radius:999px;background:#fff;border:1px solid #ead58f;white-space:nowrap}
+.statement-controls{margin-bottom:14px}
+.statement-presets{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0 13px}.statement-presets button.active{background:#9d6b05;color:#fff;border-color:#9d6b05}
+.statement-kpis{margin-top:0}
+.statement-print-head{display:none}
+.statement-ledger-card{margin-top:14px}
+.statement-table table{min-width:1080px}
+.money-in{color:#26704d;font-weight:800}.money-out{color:#9e473f;font-weight:800}
+.statement-summary-grid{margin-top:14px}
+@media(max-width:1100px){
+ .dashboard-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .update-chip{display:none}
+}
+@media(max-width:760px){
+ html,body{max-width:100%;overflow-x:hidden}
+ .app-shell{grid-template-columns:1fr!important;min-width:0}
+ .sidebar{position:relative!important;top:auto!important;height:auto!important;max-height:none!important;width:100%!important;padding:10px!important;border-right:0!important;border-bottom:1px solid var(--line)}
+ .brand{padding:2px 4px 8px!important}
+ .brand-mark{width:44px!important;height:44px!important;min-width:44px}
+ .brand h1{font-size:16px!important}
+ .brand p{display:none}
+ .sidebar nav{display:flex!important;gap:7px!important;overflow-x:auto!important;overflow-y:hidden!important;padding:4px 0 8px!important;scrollbar-width:none}
+ .sidebar nav::-webkit-scrollbar{display:none}
+ .sidebar nav button{flex:0 0 auto!important;white-space:nowrap!important;padding:9px 11px!important}
+ .side-footer{display:none!important}
+ .main{padding:10px!important;min-width:0}
+ .topbar{align-items:flex-start!important;gap:8px!important;flex-direction:column!important;margin-bottom:10px}
+ .topbar h2{font-size:24px!important}
+ .top-actions{width:100%!important;flex-wrap:nowrap!important;overflow-x:auto!important;padding-bottom:3px;scrollbar-width:none}
+ .top-actions::-webkit-scrollbar{display:none}
+ .top-actions>*{flex:0 0 auto!important;white-space:nowrap}
+ .hero,.dashboard-hero{grid-template-columns:1fr!important;padding:16px!important}
+ .hero h3{font-size:24px!important}
+ .kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ .grid2,.grid3{grid-template-columns:1fr!important}
+ .dashboard-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ .statement-hero{align-items:flex-start;flex-direction:column}
+ .statement-date-grid{grid-template-columns:1fr!important}
+ .statement-presets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .statement-presets button{width:100%}
+ .statement-table{overflow-x:auto}
+ .card,.kpi,.hero{max-width:100%;min-width:0}
+ input,select,textarea{font-size:16px}
+}
+@media(max-width:420px){
+ .kpis{grid-template-columns:1fr 1fr!important}
+ .dashboard-shortcuts{grid-template-columns:1fr 1fr!important}
+ .dashboard-shortcuts button{padding:10px}
+ .app-version-badge{font-size:9px}
+}
+@media print{
+ body.statement-printing *{visibility:hidden!important}
+ body.statement-printing #statementOutput,body.statement-printing #statementOutput *{visibility:visible!important}
+ body.statement-printing #statementOutput{position:absolute!important;left:0;top:0;width:100%!important;background:#fff!important;color:#111!important;padding:10mm}
+ body.statement-printing .statement-print-head{display:flex!important;justify-content:space-between;border-bottom:2px solid #9d6b05;padding-bottom:8px;margin-bottom:10px}
+ body.statement-printing .statement-table{overflow:visible!important}
+ body.statement-printing .statement-table table{min-width:0!important;font-size:8px}
+ body.statement-printing .card,body.statement-printing .kpi{box-shadow:none!important;break-inside:avoid}
+ body.statement-printing .kpis{grid-template-columns:repeat(4,1fr)!important}
+ body.statement-printing .grid2{grid-template-columns:1fr 1fr!important}
+}
