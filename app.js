@@ -7,6 +7,21 @@ const money=n=>'₹'+Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:
 const uid=(p='ID')=>p+'-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 const sum=(arr,fn)=>arr.reduce((a,x)=>a+Number(fn(x)||0),0);
+const APP_ID='MAHAMAYA-CLINIC-OS';
+const RELEASE='V1.8 FINAL STABLE';
+function lastBackupLabel(){
+  const v=localStorage.getItem('mc_os_last_backup_at');
+  if(!v)return 'Backup not recorded';
+  try{return new Date(v).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'})}catch(e){return 'Backup recorded'}
+}
+function integrityCheck(){
+  const required=['bills','incomes','expenses','inventory','vendors','staff','closings','reminders','audit'];
+  const missing=required.filter(k=>!Array.isArray(db[k]));
+  const localOk=(()=>{try{localStorage.setItem('mc_os_test','1');localStorage.removeItem('mc_os_test');return true}catch(e){return false}})();
+  const result={ok:!missing.length&&!!db.settings&&localOk,missing,localOk};
+  return result;
+}
+
 
 const seed={
   settings:{
@@ -247,11 +262,19 @@ function dashboard(){
     </div>
   </div>
 
-  <div class="dashboard-shortcuts">
-    <button data-viewjump="statement"><span>📑</span><b>Financial Statement</b><small>1 day → 1 year • PDF • Share</small></button>
-    <button data-viewjump="reports"><span>📊</span><b>Reports</b><small>Monthly operational summary</small></button>
+  <div class="dashboard-shortcuts final-shortcuts">
     <button data-action="bill"><span>🧾</span><b>Quick Bill</b><small>Fast patient billing</small></button>
-    <button data-action="reminder"><span>⏰</span><b>Reminder</b><small>Payments • stock • tasks</small></button>
+    <button data-action="income"><span>₹</span><b>Add Income</b><small>Other clinic income</small></button>
+    <button data-action="expense"><span>💸</span><b>Add Expense</b><small>Record payment / cost</small></button>
+    <button data-viewjump="closing"><span>✅</span><b>Daily Closing</b><small>Reconcile & close day</small></button>
+    <button data-viewjump="statement"><span>📑</span><b>Statement</b><small>1 day → 1 year • PDF • CSV</small></button>
+    <button id="dashBackupBtn"><span>🛡️</span><b>Backup Now</b><small>${esc(lastBackupLabel())}</small></button>
+  </div>
+  <div class="clinic-status-strip">
+    <span class="status-pill ${db.closings.some(x=>x.date===today())?'good':'warn'}">${db.closings.some(x=>x.date===today())?'✅ Day closed':'🕘 Day open'}</span>
+    <span class="status-pill">☁ ${esc(document.getElementById('cloudLabel')?.textContent||'Local mode')}</span>
+    <span class="status-pill">🛡️ ${esc(lastBackupLabel())}</span>
+    <span class="status-pill good">🔒 ${RELEASE}</span>
   </div>
 
   <div class="kpis">
@@ -498,7 +521,7 @@ function statement(){
       <h3>Clinic Financial Statement</h3>
       <p class="muted">Bank-statement style view of patient receipts, other income and expenses. Select a period, review the ledger, then print/save PDF or share a summary.</p>
     </div>
-    <div class="statement-version">Mahamaya Clinic OS • V1.7.1</div>
+    <div class="statement-version">Mahamaya Clinic OS • V1.8 FINAL STABLE</div>
   </div>
 
   <div class="card statement-controls">
@@ -599,6 +622,12 @@ function settings(){
         <label>Consultation Rate<input id="setConsult" type="number" value="${db.settings.consultationRate}"></label>
         <label>Follow-up Rate<input id="setFollow" type="number" value="${db.settings.followupRate}"></label>
         <div class="full"><button class="primary" id="saveSettingsBtn">Save Settings</button></div>
+        <div class="full final-safety-card">
+          <b>🔒 Final Stable Safety</b>
+          <small>Repository identity: MAHAMAYA-CLINIC-OS • Keep Swarnaprashan and other apps in separate repositories.</small>
+          <div class="actions"><button id="integrityCheckBtn">Run Data Integrity Check</button><button id="settingsBackupBtn2">Backup Now</button></div>
+          <div id="integrityResult" class="muted">Use this before/after any future deployment.</div>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -988,9 +1017,19 @@ function bindView(){
   $$('[data-remdone]').forEach(b=>b.onclick=()=>{const id=b.dataset.remdone; const r=(db.reminders||[]).find(x=>x.id===id); if(r){r.done=true;r.doneAt=nowISO();save(`Reminder ${r.title} completed`);render();toast('Reminder marked done')}});
   $$('[data-remdelete]').forEach(b=>b.onclick=()=>{const id=b.dataset.remdelete; const r=(db.reminders||[]).find(x=>x.id===id); if(confirm('Delete this reminder?')){db.reminders=(db.reminders||[]).filter(x=>x.id!==id);save(`Reminder ${r?.title||id} deleted`);render();toast('Reminder deleted')}});
   bindStatementControls();
+  if($('#dashBackupBtn')) $('#dashBackupBtn').onclick=backup;
+  $$('[data-mobile-view]').forEach(b=>b.onclick=()=>{currentView=b.dataset.mobileView;render();window.scrollTo({top:0,behavior:'smooth'})});
+  $$('[data-mobile-action]').forEach(b=>b.onclick=()=>action(b.dataset.mobileAction));
   if($('#closeDayBtn')) $('#closeDayBtn').onclick=closeDay;
   if($('#saveSettingsBtn')) $('#saveSettingsBtn').onclick=()=>{db.settings.clinicName=$('#setClinicName').value;db.settings.owner=$('#setOwner').value;db.settings.consultationRate=Number($('#setConsult').value||0);db.settings.followupRate=Number($('#setFollow').value||0);save('Clinic settings updated');render();toast('Settings saved')};
   if($('#settingsBackupBtn')) $('#settingsBackupBtn').onclick=backup;
+  if($('#settingsBackupBtn2')) $('#settingsBackupBtn2').onclick=backup;
+  if($('#integrityCheckBtn')) $('#integrityCheckBtn').onclick=()=>{
+    const r=integrityCheck(), el=$('#integrityResult');
+    if(el){el.className=r.ok?'integrity-result good':'integrity-result bad';el.textContent=r.ok?'PASS — Local data structure and browser storage are healthy.':`CHECK REQUIRED — ${r.missing.length?'Missing: '+r.missing.join(', '):'Browser storage unavailable'}`;}
+    toast(r.ok?'Integrity check passed':'Integrity check needs attention');
+  };
+
   if($('#restoreBtn')) $('#restoreBtn').onclick=restorePrompt;
   if($('#resetBtn')) $('#resetBtn').onclick=()=>{if(confirm('Reset ALL local app data? This cannot be undone without a backup.')){db=structuredClone(seed);save('Local data reset');render();toast('Local data reset')}};
 }
@@ -1004,12 +1043,28 @@ function closeDay(){
   save(`Day ${today()} closed with difference ${difference}`);render();toast('Day closed');
 }
 function backup(){
-  const blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Mahamaya-Clinic-OS-backup-${today()}.json`;a.click();URL.revokeObjectURL(a.href);toast('Backup downloaded');
+  const snapshot={...db,_meta:{appId:APP_ID,release:RELEASE,exportedAt:nowISO()}};
+  const blob=new Blob([JSON.stringify(snapshot,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Mahamaya-Clinic-OS-backup-${today()}.json`;a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),500);
+  localStorage.setItem('mc_os_last_backup_at',nowISO());
+  toast('Backup downloaded safely');
+  if(currentView==='dashboard')render();
 }
 function restorePrompt(){
+  if(!confirm('Restore will replace the current local Clinic OS data. Please create a fresh Backup first. Continue only if you have a safe backup.'))return;
   const i=document.createElement('input');i.type='file';i.accept='.json,application/json';
-  i.onchange=()=>{const f=i.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.settings||!d.bills)throw new Error('Invalid');db=d;save('Backup restored');render();toast('Backup restored')}catch(e){alert('Invalid backup file')}};r.readAsText(f)};i.click();
+  i.onchange=()=>{
+    const f=i.files[0];if(!f)return;const r=new FileReader();
+    r.onload=()=>{try{
+      const d=JSON.parse(r.result);
+      if(!d.settings||!Array.isArray(d.bills)||!Array.isArray(d.incomes)||!Array.isArray(d.expenses))throw new Error('Invalid Clinic OS backup');
+      if(d._meta&&d._meta.appId&&d._meta.appId!==APP_ID)throw new Error('This backup belongs to a different app');
+      delete d._meta;
+      if(!confirm('Clinic OS backup verified. Replace current local data now?'))return;
+      db=d;save('Verified Clinic OS backup restored');render();toast('Backup restored');
+    }catch(e){alert('Restore blocked: '+e.message)}};r.readAsText(f)
+  };i.click();
 }
 render();
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});

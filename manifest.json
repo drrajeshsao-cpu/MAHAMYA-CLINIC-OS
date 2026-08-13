@@ -1,7 +1,7 @@
 {
-  "name": "Mahamaya Clinic OS V1.7.2",
-  "short_name": "Mahamaya OS",
-  "start_url": "./?v=1.7.2",
+  "name": "Mahamaya Clinic OS V1.8 Final Stable",
+  "short_name": "Clinic OS V1.8",
+  "start_url": "./?v=1.8.0",
   "display": "standalone",
   "background_color": "#fff9e8",
   "theme_color": "#9d6b05",

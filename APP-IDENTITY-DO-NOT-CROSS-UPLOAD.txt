@@ -1,0 +1,6 @@
+APP ID: MAHAMAYA-CLINIC-OS
+RELEASE: V1.8 FINAL STABLE
+PURPOSE: Mahamaya Clinic finance, billing, inventory, staff, operations and statements.
+
+DO NOT upload files from Swarnaprashan, SAO Workplace, RAJ Health 360, Spine Rx or any other repository here.
+Before any future deployment verify repository name = MAHAMAYA-CLINIC-OS.

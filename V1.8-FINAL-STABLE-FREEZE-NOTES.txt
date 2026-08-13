@@ -1,0 +1,23 @@
+MAHAMAYA CLINIC OS — V1.8 FINAL STABLE
+Finalized: 13 Aug 2026
+
+FINALIZATION PRINCIPLE
+Reliability-first. No feature bloat. Existing Firebase/login/data schema preserved.
+
+FINAL ADDITIONS
+- Permanent V1.7.2 Statements runtime fix retained.
+- Final Stable version/build identity and repository guard.
+- Faster dashboard: Bill, Income, Expense, Daily Closing, Statement, Backup.
+- Dashboard operational status: day-open/closed, cloud, backup freshness, release status.
+- Mobile bottom dock for Home/Bill/Income/Expense/Statement.
+- Backup now records last-backup time.
+- Restore has two-step confirmation, schema checks and cross-app backup protection.
+- Settings Data Integrity Check.
+- Responsive polish for mobile/tablet/laptop/desktop.
+- Final service-worker cache V1.8 to avoid stale V1.7 scripts.
+
+FREEZE RULE
+After regression testing, freeze this version. Future changes only for verified bug/security/data-safety issues.
+
+EXACT COMMIT MESSAGE
+MAHAMAYA CLINIC OS — V1.8 FINAL STABLE — Reliability polish mobile dock data safety and freeze
