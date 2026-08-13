@@ -1,323 +1,133 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
-import {
-  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut,
-  sendPasswordResetEmail, setPersistence, browserLocalPersistence
-} from "https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js";
-import {
-  getFirestore, collection, doc, getDocs, getDocFromServer, setDoc, deleteDoc,
-  onSnapshot, enableMultiTabIndexedDbPersistence
-} from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import { getAuth,setPersistence,browserLocalPersistence,signInWithEmailAndPassword,onAuthStateChanged,signOut,sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+import { getFirestore,collection,doc,getDoc,getDocs,setDoc,onSnapshot,serverTimestamp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+import { firebaseConfig,ADMIN_EMAIL } from "./firebase-config.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDt5DVFRp9v9ZyaoWSy_LG7bw-b3w38AyU",
-  authDomain: "mahamaya-swarnaprashan-cloud.firebaseapp.com",
-  projectId: "mahamaya-swarnaprashan-cloud",
-  storageBucket: "mahamaya-swarnaprashan-cloud.firebasestorage.app",
-  messagingSenderId: "669931973964",
-  appId: "1:669931973964:web:cf4fc401e2d70ec58c33e9"
-};
+const DB_KEY="mahamayaClinicOS_v1";
+const SECTIONS=["bills","incomes","expenses","inventory","vendors","staff","swarnaprashan","camps","assets","maintenance","closings","reminders","audit"];
+const dot=document.getElementById("cloudDot"),label=document.getElementById("cloudLabel"),chip=document.getElementById("userChip"),cloudBtn=document.getElementById("cloudBtn");
+const configured=firebaseConfig?.apiKey&&!String(firebaseConfig.apiKey).includes("PASTE_")&&firebaseConfig?.projectId&&!String(firebaseConfig.projectId).includes("PASTE_");
+let applyingRemote=false,unsubs=[],auth=null,fs=null;
 
-const fbApp=initializeApp(firebaseConfig);
-const auth=getAuth(fbApp);
-const firestore=getFirestore(fbApp);
-
-setPersistence(auth,browserLocalPersistence).catch(()=>{});
-enableMultiTabIndexedDbPersistence(firestore).catch(e=>console.warn('Firestore persistence fallback',e?.code||e));
-
-const COLLECTIONS={
-  children:'children',
-  cases:'cases',
-  followups:'followups',
-  vaccines:'vaccines',
-  plans:'plans',
-  payments:'payments',
-  inventory:'inventory'
-};
-
-let currentUser=null;
-let listeners=[];
-let cloudState={children:[],cases:[],followups:[],vaccines:[],plans:[],payments:[],inventory:[],settings:null};
-let readyCollections=new Set();
-let applyingRemote=false;
-let writeTimer=null;
-let popover=null;
-
-const gate=document.getElementById('firebaseAuthGate');
-const emailEl=document.getElementById('firebaseEmail');
-const passwordEl=document.getElementById('firebasePassword');
-const loginBtn=document.getElementById('firebaseLoginBtn');
-const forgotBtn=document.getElementById('firebaseForgotBtn');
-const messageEl=document.getElementById('firebaseLoginMessage');
-const cloudBtn=document.getElementById('cloudAccountBtn');
-
-function setMessage(text,type=''){
-  if(!messageEl)return;
-  messageEl.textContent=text;
-  messageEl.className='firebase-login-message '+type;
-}
-function setStatus(state,text){
-  const el=document.getElementById('cloudStatus');
-  if(!el)return;
-  el.className='cloud-status cloud-'+state;
-  const b=el.querySelector('b'); if(b)b.textContent=text;
-}
-function meaningful(data){
-  if(!data)return false;
-  return ['children','cases','followups','vaccines','plans','payments','inventory'].some(k=>(data[k]?.length||0)>0);
-}
-function clone(x){return JSON.parse(JSON.stringify(x))}
-function currentLocal(){
-  try{return window.app?.getCloudSnapshot?.()||null}catch(e){return null}
-}
-async function waitForAppBridge(timeout=5000){
-  const started=Date.now();
-  while(Date.now()-started<timeout){
-    if(window.app?.getCloudSnapshot && window.app?.applyCloudSnapshot)return true;
-    await new Promise(r=>setTimeout(r,100));
-  }
-  return false;
-}
-function normalizeRecordForCloud(record){
-  return clone(record);
-}
-function arraysToMap(arr){return new Map((arr||[]).map(x=>[String(x.id),x]))}
-function same(a,b){return JSON.stringify(a)===JSON.stringify(b)}
-
-async function uploadCollectionDiff(localArr, cloudArr, collectionName){
-  const lm=arraysToMap(localArr), cm=arraysToMap(cloudArr);
-  const jobs=[];
-  for(const [id,item] of lm){
-    if(!cm.has(id) || !same(item,cm.get(id))){
-      jobs.push(setDoc(doc(firestore,collectionName,id),normalizeRecordForCloud(item),{merge:false}));
-    }
-  }
-  for(const [id] of cm){
-    if(!lm.has(id)) jobs.push(deleteDoc(doc(firestore,collectionName,id)));
-  }
-  if(jobs.length) await Promise.all(jobs);
-}
-
-async function syncLocalToCloud(reason='save'){
-  if(!currentUser || applyingRemote || !navigator.onLine)return;
-  const local=currentLocal(); if(!local)return;
-  setStatus('syncing','Syncing…');
-  try{
-    for(const [key,col] of Object.entries(COLLECTIONS)){
-      await uploadCollectionDiff(local[key]||[],cloudState[key]||[],col);
-    }
-    if(!same(local.settings||{},cloudState.settings||{})){
-      await setDoc(doc(firestore,'clinicSettings','main'),clone(local.settings||{}),{merge:false});
-    }
-    setStatus('synced','☁ Synced');
-  }catch(e){
-    console.error('Cloud write failed',e);
-    setStatus(navigator.onLine?'error':'offline',navigator.onLine?'⚠ Sync error':'● Offline • queued');
+function status(type,text){
+  if(dot)dot.className="dot "+type;
+  if(label)label.textContent=text;
+  if(cloudBtn){
+    cloudBtn.dataset.cloudStatus=type;
+    cloudBtn.textContent=type==="synced"?"☁ Synced":type==="error"?"☁ Cloud issue":text.includes("Syncing")||text.includes("Connecting")?"☁ Syncing…":"☁ Cloud";
   }
 }
-function scheduleSync(reason='local-save'){
-  if(applyingRemote || !currentUser)return;
-  clearTimeout(writeTimer);
-  writeTimer=setTimeout(()=>syncLocalToCloud(reason),600);
-}
+function localDb(){try{return JSON.parse(localStorage.getItem(DB_KEY)||"{}")||{}}catch{return {}}}
+function saveLocal(d){applyingRemote=true;localStorage.setItem(DB_KEY,JSON.stringify(d));applyingRemote=false}
+function stripMeta(x){const y={...x};delete y.__cloudUpdatedAt;return y}
+function friendly(c=""){return ({"auth/invalid-credential":"Email or password is incorrect.","auth/too-many-requests":"Too many attempts. Please wait and try again.","auth/network-request-failed":"Network problem. Local data is still available.","auth/user-disabled":"This account is disabled."})[c]||String(c).replace("auth/","").replaceAll("-"," ")}
+function notifyUpdate(){window.dispatchEvent(new Event("mahamaya-cloud-updated"))}
 
-function applyComposedCloud(){
-  if(readyCollections.size<8)return;
-  const composed={
-    children:clone(cloudState.children||[]),
-    cases:clone(cloudState.cases||[]),
-    followups:clone(cloudState.followups||[]),
-    vaccines:clone(cloudState.vaccines||[]),
-    plans:clone(cloudState.plans||[]),
-    payments:clone(cloudState.payments||[]),
-    inventory:clone(cloudState.inventory||[]),
-    settings:clone(cloudState.settings||{})
+function showLogin(){
+  document.querySelectorAll(".cloud-login-overlay").forEach(x=>x.remove());
+  const w=document.createElement("div"); w.className="cloud-login-overlay";
+  w.innerHTML=`<div class="cloud-login-card"><button id="cloudLoginClose" class="cloud-login-close" aria-label="Close">✕</button><div class="login-emblem">✦</div><h2>Mahamaya Clinic OS</h2><p class="login-blessing">श्री धन्वन्तरये नमः</p><p>Single Admin Cloud Login</p><label>Email<input id="cloudEmail" type="email" value="${ADMIN_EMAIL||""}" autocomplete="username"></label><label>Password<input id="cloudPassword" type="password" autocomplete="current-password"></label><button id="cloudLoginDo" class="primary">Sign In</button><button id="cloudResetDo">Forgot Password</button><button id="cloudUseLocal">Use Local Mode</button><div id="cloudLoginMsg"></div></div>`;
+  document.body.appendChild(w);
+  const m=w.querySelector("#cloudLoginMsg");
+  const close=()=>w.remove();
+  w.querySelector("#cloudLoginClose").onclick=close;
+  w.querySelector("#cloudUseLocal").onclick=close;
+  w.querySelector("#cloudLoginDo").onclick=async()=>{
+    const email=w.querySelector("#cloudEmail").value.trim(),pass=w.querySelector("#cloudPassword").value;
+    if(ADMIN_EMAIL&&email.toLowerCase()!==ADMIN_EMAIL.toLowerCase()){m.textContent="This app is configured for the single admin account only.";return}
+    m.textContent="Signing in…";
+    try{await signInWithEmailAndPassword(auth,email,pass);close()}catch(e){m.textContent="Login failed: "+friendly(e.code)}
   };
-  applyingRemote=true;
+  w.querySelector("#cloudResetDo").onclick=async()=>{
+    const email=w.querySelector("#cloudEmail").value.trim()||ADMIN_EMAIL;
+    if(!email){m.textContent="Enter admin email first.";return}
+    try{await sendPasswordResetEmail(auth,email);m.textContent="Password reset email sent."}catch(e){m.textContent="Reset failed: "+friendly(e.code)}
+  };
+}
+
+if(!configured){
+  status("local","Local mode • Cloud not configured");
+  if(cloudBtn)cloudBtn.onclick=()=>alert("Cloud is not configured yet.");
+}else{
   try{
-    window.app?.applyCloudSnapshot?.(composed);
-  }finally{
-    setTimeout(()=>{applyingRemote=false},0);
-  }
-  setStatus('synced','☁ Synced');
-}
+    const fb=initializeApp(firebaseConfig);
+    auth=getAuth(fb);
+    await setPersistence(auth,browserLocalPersistence);
+    fs=getFirestore(fb); // Deliberately simple: localStorage provides offline safety; Firestore handles network sync.
 
-async function initialCloudEmpty(){
-  let total=0;
-  for(const col of Object.values(COLLECTIONS)){
-    const s=await getDocs(collection(firestore,col));
-    total+=s.size;
-  }
-  const settingsSnap=await getDocFromServer(doc(firestore,'clinicSettings','main')).catch(()=>null);
-  if(settingsSnap?.exists())total++;
-  return total===0;
-}
+    const rootRef=doc(fs,"clinicOS","root");
+    const sectionRef=s=>collection(fs,"clinicOS","root",s);
 
-async function seedCloudFromLocal(local){
-  setStatus('syncing','Uploading existing clinic data…');
-  for(const [key,col] of Object.entries(COLLECTIONS)){
-    for(const item of (local[key]||[])){
-      await setDoc(doc(firestore,col,String(item.id)),clone(item),{merge:false});
-    }
-  }
-  await setDoc(doc(firestore,'clinicSettings','main'),clone(local.settings||{}),{merge:false});
-}
-
-function clearListeners(){
-  listeners.forEach(fn=>{try{fn()}catch{}});
-  listeners=[];readyCollections.clear();
-}
-function startListeners(){
-  clearListeners();
-  for(const [key,col] of Object.entries(COLLECTIONS)){
-    listeners.push(onSnapshot(collection(firestore,col),{includeMetadataChanges:true},snap=>{
-      if(snap.metadata.hasPendingWrites){
-        setStatus(navigator.onLine?'syncing':'offline',navigator.onLine?'Syncing…':'● Offline • queued');
-        return;
+    async function pullAll(){
+      const l=localDb();
+      const root=await getDoc(rootRef);
+      if(root.exists()&&root.data().settings)l.settings=root.data().settings;
+      for(const s of SECTIONS){
+        const snap=await getDocs(sectionRef(s));
+        const map=new Map((l[s]||[]).filter(x=>x?.id).map(x=>[String(x.id),x]));
+        snap.docs.forEach(d=>{const x=stripMeta(d.data());map.set(String(x.id||d.id),x)});
+        l[s]=[...map.values()];
       }
-      cloudState[key]=snap.docs.map(d=>({id:d.id,...d.data()}));
-      readyCollections.add(key);
-      applyComposedCloud();
-    },e=>{
-      console.error(col+' listener error',e);
-      setStatus(navigator.onLine?'error':'offline',navigator.onLine?'⚠ Sync error':'● Offline');
-    }));
-  }
-  listeners.push(onSnapshot(doc(firestore,'clinicSettings','main'),{includeMetadataChanges:true},snap=>{
-    if(snap.metadata.hasPendingWrites)return;
-    cloudState.settings=snap.exists()?snap.data():{};
-    readyCollections.add('settings');
-    applyComposedCloud();
-  },e=>{
-    console.error('settings listener error',e);
-    setStatus(navigator.onLine?'error':'offline',navigator.onLine?'⚠ Sync error':'● Offline');
-  }));
-}
-
-function openLocalSession(user){
-  const email=String(user?.email||'').trim().toLowerCase();
-
-  const profiles={
-    'dr.raju2010@gmail.com':{
-      name:'Dr Rajesh Sao',
-      loginId:'drrajesh',
-      role:'Super Admin'
-    },
-    'rchandrakar127@gmail.com':{
-      name:'Dr Ravi Chandrakar',
-      loginId:'drravi',
-      role:'Doctor'
+      saveLocal(l); notifyUpdate();
     }
-  };
 
-  const profile=profiles[email];
-
-  if(!profile){
-    console.error('Authorized role not configured for:',email);
-    return;
-  }
-
-  try{
-    localStorage.setItem(
-      'mahamaya_swarnaprashan_session_v1',
-      JSON.stringify({
-        id:user.uid,
-        name:profile.name,
-        loginId:profile.loginId,
-        email:email,
-        role:profile.role,
-        at:Date.now(),
-        firebase:true
-      })
-    );
-  }catch{}
-
-  document.getElementById('authGate')?.style.setProperty('display','none');
-  document.getElementById('appShell')?.classList.remove('auth-hidden');
-
-  const badge=document.getElementById('currentUserBadge');
-  if(badge) badge.textContent=`${profile.name} • ${profile.role}`;
-
-  try{
-    window.app?.showView?.('dashboard');
-  }catch{}
-}
-
-async function initializeCloudUser(user){
-  currentUser=user;
-  setStatus(navigator.onLine?'syncing':'offline',navigator.onLine?'Connecting cloud…':'● Offline');
-  const bridge=await waitForAppBridge();
-  if(!bridge){
-    setStatus('error','⚠ App sync bridge unavailable');return;
-  }
-  openLocalSession(user);
-
-  try{
-    const empty=await initialCloudEmpty();
-    const local=currentLocal();
-    if(empty && meaningful(local)){
-      await seedCloudFromLocal(local);
+    async function uploadAll(){
+      const data=localDb(); status("local","Syncing…");
+      await setDoc(rootRef,{settings:data.settings||{},schemaVersion:"1.3",updatedAt:serverTimestamp()},{merge:true});
+      for(const s of SECTIONS){
+        for(const row of (data[s]||[])){
+          if(!row?.id)continue;
+          await setDoc(doc(sectionRef(s),String(row.id)),{...row,__cloudUpdatedAt:serverTimestamp()},{merge:true});
+        }
+      }
+      status("synced","Synced");
     }
-    startListeners();
-  }catch(e){
-    console.error('Initial cloud setup failed',e);
-    startListeners();
-    setStatus(navigator.onLine?'error':'offline',navigator.onLine?'⚠ Cloud connection problem':'● Offline');
-  }
+
+    function listen(){
+      unsubs.forEach(u=>u());unsubs=[];
+      unsubs.push(onSnapshot(rootRef,snap=>{
+        if(!snap.exists()||!snap.data().settings)return;
+        const l=localDb();l.settings=snap.data().settings;saveLocal(l);status("synced","Synced");notifyUpdate();
+      },e=>{console.error(e);status("error","Cloud unavailable • Local safe")}));
+      for(const s of SECTIONS){
+        unsubs.push(onSnapshot(sectionRef(s),snap=>{
+          const l=localDb(),map=new Map((l[s]||[]).filter(x=>x?.id).map(x=>[String(x.id),x]));
+          snap.docChanges().forEach(ch=>{
+            if(ch.type==="removed")map.delete(String(ch.doc.id));
+            else{const x=stripMeta(ch.doc.data());map.set(String(x.id||ch.doc.id),x)}
+          });
+          l[s]=[...map.values()];saveLocal(l);status("synced","Synced");notifyUpdate();
+        },e=>{console.error(e);status("error","Cloud unavailable • Local safe")}));
+      }
+    }
+
+    onAuthStateChanged(auth,async u=>{
+      document.querySelectorAll(".cloud-login-overlay").forEach(x=>x.remove());
+      if(!u){status("local","Local mode • Tap Cloud to sign in");if(chip)chip.textContent="🔒 Single Admin";return}
+      if(ADMIN_EMAIL&&u.email?.toLowerCase()!==ADMIN_EMAIL.toLowerCase()){await signOut(auth);alert("This account is not the configured admin.");return}
+      if(chip)chip.textContent="✓ "+(u.email||"Admin");status("local","Connecting cloud…");
+      try{await pullAll();await uploadAll();listen();status("synced","Synced");window.dispatchEvent(new Event("mahamaya-cloud-ready"))}
+      catch(e){console.error("Cloud bootstrap failed",e);status("error",String(e?.code||"").includes("permission-denied")?"Cloud permission blocked • Local safe":"Cloud unavailable • Local safe")}
+    });
+
+    const nativeSet=Storage.prototype.setItem;
+    Storage.prototype.setItem=function(k,v){
+      nativeSet.call(this,k,v);
+      if(k===DB_KEY&&auth.currentUser&&!applyingRemote){
+        clearTimeout(window.__mcSyncTimer);
+        window.__mcSyncTimer=setTimeout(()=>uploadAll().catch(e=>{console.error(e);status("error","Cloud unavailable • Local safe")}),650);
+      }
+    };
+
+    if(cloudBtn)cloudBtn.onclick=async()=>{
+      if(auth.currentUser){if(confirm("Cloud is connected. Sign out on this device?"))await signOut(auth)}
+      else showLogin();
+    };
+  }catch(e){console.error(e);status("error","Cloud setup error • Local safe")}
 }
 
-window.addEventListener('swarnaprashan-local-save',()=>scheduleSync());
-window.addEventListener('online',()=>{if(currentUser){setStatus('syncing','Reconnecting…');scheduleSync('reconnect')}});
-window.addEventListener('offline',()=>setStatus('offline','● Offline • changes stay local'));
+// No automatic blocking login overlay. The app always opens first.
+document.querySelectorAll(".cloud-login-overlay").forEach(x=>x.remove());
 
-loginBtn?.addEventListener('click',async()=>{
-  const email=(emailEl?.value||'').trim(),pw=passwordEl?.value||'';
-  if(!email||!pw){setMessage('Enter email and password.','error');return}
-  loginBtn.disabled=true;setMessage('Signing in securely…');
-  try{
-    await signInWithEmailAndPassword(auth,email,pw);
-    passwordEl.value='';
-  }catch(e){
-    console.error(e);
-    setMessage(e?.code==='auth/invalid-credential'?'Email or password is incorrect.':'Sign-in failed: '+(e?.code||'error'),'error');
-  }finally{loginBtn.disabled=false}
-});
-passwordEl?.addEventListener('keydown',e=>{if(e.key==='Enter')loginBtn.click()});
-forgotBtn?.addEventListener('click',async()=>{
-  const email=(emailEl?.value||'').trim();
-  if(!email){setMessage('Enter your email first.','error');return}
-  try{await sendPasswordResetEmail(auth,email);setMessage('Password reset email sent. Check Inbox and Spam.','ok')}
-  catch(e){setMessage('Could not send reset email: '+(e?.code||'error'),'error')}
-});
-
-function closePopover(){popover?.remove();popover=null}
-cloudBtn?.addEventListener('click',()=>{
-  if(popover){closePopover();return}
-  popover=document.createElement('div');popover.className='cloud-popover';
-  popover.innerHTML=currentUser?`
-    <h4>☁ Mahamaya Swarnaprashan Cloud</h4>
-    <p><b>${currentUser.email||'Signed in'}</b></p>
-    <div class="cloud-scope-note">
-      Synced now: children, clinical cases, follow-ups, vaccination/schedule, plans, payment ledger, inventory ledger and clinic settings.<br><br>
-      Device-local in Phase 1: baby photos, investigation images, PDFs and manual-card file blobs.
-    </div>
-    <div class="actionrow">
-      <button id="cloudSyncNow">Sync Now</button>
-      <button id="cloudSignOut" class="ghost">Sign Out</button>
-    </div>`:`<h4>Cloud account</h4><p>Not signed in.</p>`;
-  document.body.appendChild(popover);
-  document.getElementById('cloudSyncNow')?.addEventListener('click',()=>{syncLocalToCloud('manual');closePopover()});
-  document.getElementById('cloudSignOut')?.addEventListener('click',async()=>{closePopover();await signOut(auth)});
-});
-
-onAuthStateChanged(auth,async user=>{
-  if(user){
-    gate?.classList.add('hidden');
-    setMessage('Signed in. Synchronizing clinic records…','ok');
-    await initializeCloudUser(user);
-  }else{
-    currentUser=null;clearListeners();
-    gate?.classList.remove('hidden');
-    setStatus('offline','Cloud sign-in required');
-    setMessage('Sign in to synchronize laptop and mobile records.');
-  }
-});
+window.addEventListener("online",()=>{if(auth?.currentUser)status("local","Connecting cloud…")});
+window.addEventListener("offline",()=>status("local","Offline • Local data safe"));

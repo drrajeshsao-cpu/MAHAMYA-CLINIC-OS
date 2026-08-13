@@ -1,23 +1,40 @@
 {
-  "name": "Mahamaya Clinic Swarnaprashan V11.16",
-  "short_name": "Swarnaprashan",
-  "start_url": "./?v=11.16",
+  "name": "Mahamaya Clinic OS — V1.7 Flexible Billing",
+  "short_name": "Mahamaya OS",
+  "start_url": "./?v=1.7",
   "display": "standalone",
-  "background_color": "#f7f4ed",
-  "theme_color": "#5f4327",
+  "background_color": "#fff9e8",
+  "theme_color": "#9d6b05",
+  "description": "Clinic OS with flexible approved billing ranges, compassionate concession support, pathology custom billing and medicine totals.",
+  "scope": "./",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
   "icons": [
     {
-      "src": "icon-192.png",
+      "src": "icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "icon-512.png",
+      "src": "icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
-  ],
-  "description": "Swarnaprashan Digital Health Suite with interactive monthly Gregorian and Hindu Panchang clinic planner."
+  ]
 }

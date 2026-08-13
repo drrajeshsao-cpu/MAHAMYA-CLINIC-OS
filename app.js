@@ -1,1893 +1,1014 @@
 
-const app=(()=>{
-const KEY='mahamaya_swarnaprashan_v7';
-const defaults={swarnaprashanRate:250,clinicName:'MAHAMAYA CLINIC',prescriptionTitle:'Swarnaprashan Digital Prescription',doctor:'Dr. Rajesh Sao, M.D. (Ayurveda)',designation:'Consultant Physician • Ayurveda',doctor2:'Dr. Ravi Chandrakar, B.A.M.S.',designation2:'Consultant Physician • Ayurveda',phone:'',address:'In front of India 1 ATM, Sheetla Chowk, Bhatagaon, Raipur',footer:'Clinical follow-up record and parent education. Seek urgent medical care for emergency symptoms.'};
-let db=JSON.parse(localStorage.getItem(KEY)||'null')||{children:[],cases:[],followups:[],vaccines:[],plans:[],settings:defaults};
-let currentView='dashboard';
-let suppressCloudEvent=false;
-db.settings={...defaults,...(db.settings||{})};db.children=db.children||[];db.cases=db.cases||[];db.followups=db.followups||[];db.vaccines=db.vaccines||[];db.payments=db.payments||[];db.inventory=db.inventory||[];db.dashboardDates=db.dashboardDates||{day1:'2026-08-11',day2:'2026-08-12'};
-const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
-const esc=s=>(s??'').toString().replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
-const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8),
-save=()=>{
-  localStorage.setItem(KEY,JSON.stringify(db));
-  if(!suppressCloudEvent){
-    window.dispatchEvent(new CustomEvent('swarnaprashan-local-save',{detail:{at:Date.now()}}));
-  }
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const DB_KEY='mahamayaClinicOS_v1';
+const today=()=>new Date().toISOString().slice(0,10);
+const nowISO=()=>new Date().toISOString();
+const money=n=>'₹'+Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:2});
+const uid=(p='ID')=>p+'-'+Date.now().toString(36).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
+const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+const sum=(arr,fn)=>arr.reduce((a,x)=>a+Number(fn(x)||0),0);
+
+const seed={
+  settings:{
+    clinicName:'Mahamaya Clinic',
+    owner:'Dr Rajesh Sao',
+    consultationRate:200,
+    followupRate:100,
+    currency:'INR'
+  },
+  services:[
+    {id:'S1',group:'Consultation',name:'New Consultation',rate:200},
+    {id:'S2',group:'Consultation',name:'Follow-up Consultation',rate:100},
+    {id:'S3',group:'Consultation',name:'Online Consultation',rate:200},
+    {id:'S4',group:'Consultation',name:'Home Visit',rate:500},
+    {id:'S5',group:'Orthopedic/Spine',name:'Manual Therapy / Mobilisation',rate:500},
+    {id:'S6',group:'Orthopedic/Spine',name:'Spinal Manipulation (document indication/safety)',rate:600},
+    {id:'S7',group:'Orthopedic/Spine',name:'Rehabilitation / Exercise Session',rate:400},
+    {id:'S8',group:'Plaster & Immobilisation',name:'POP Slab / Cast',rate:800},
+    {id:'S9',group:'Plaster & Immobilisation',name:'Cast Removal / Adjustment',rate:300},
+    {id:'S10',group:'Suturing & Wound Care',name:'Simple Suturing',rate:600},
+    {id:'S11',group:'Suturing & Wound Care',name:'Dressing / Re-dressing',rate:250},
+    {id:'S12',group:'Injection / IV',name:'Injection Service',rate:100},
+    {id:'S13',group:'Injection / IV',name:'IV Cannulation / Drip Service',rate:350},
+    {id:'S14',group:'Panchakarma',name:'Kati Basti',rate:700},
+    {id:'S15',group:'Panchakarma',name:'Janu Basti',rate:700},
+    {id:'S16',group:'Panchakarma',name:'Greeva Basti',rate:700},
+    {id:'S17',group:'Panchakarma',name:'Matra Basti',rate:700},
+    {id:'S18',group:'Panchakarma',name:'Abhyanga + Swedana',rate:1000},
+    {id:'S19',group:'Panchakarma',name:'Nasya',rate:600},
+    {id:'S20',group:'Panchakarma',name:'Shirodhara',rate:1200},
+    {id:'S21',group:'Ayurvedic Procedures',name:'Agnikarma',rate:600},
+    {id:'S22',group:'Ayurvedic Procedures',name:'Viddha Karma',rate:500},
+    {id:'S23',group:'Ayurvedic Procedures',name:'Cauterization / Thermal Procedure',rate:600},
+    {id:'S24',group:'Documents',name:'Medical Certificate',rate:200},
+    {id:'S25',group:'Professional',name:'Training / Lecture / Camp Honorarium',rate:0}
+  ],
+  bills:[], incomes:[], expenses:[], inventory:[], vendors:[], staff:[],
+  swarnaprashan:[], camps:[], assets:[], maintenance:[], closings:[],
+  reminders:[], audit:[]
 };
-const fmt=d=>d?new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'-';
-const child=id=>db.children.find(x=>x.id===id),fups=id=>db.followups.filter(x=>x.childId===id).sort((a,b)=>new Date(a.date)-new Date(b.date));
 
-const CHILD_STATUSES=[
-  'Active',
-  'Ready for Swarnaprashan',
-  "Today's Dose Taken",
-  'Appointment Fixed',
-  'Out of City',
-  'Temporarily Hold - Health Issue',
-  'Swarnaprashan Stopped',
-  'Home Use Medicine'
+const BILLING_CATALOG = [
+  {id:'FB-CONSULT', group:'Consultation', name:'Consultation', min:0, max:200, presets:[0,100,200], defaultRate:200, note:'₹0 = Free / Seva'},
+  {id:'FB-FOLLOW', group:'Consultation', name:'Follow-up Consultation', min:0, max:100, presets:[0,50,100], defaultRate:100, note:'₹0 = Free / Seva'},
+  {id:'FB-DRESS', group:'Dressing & Wound Care', name:'Dressing / Re-dressing', min:30, max:300, presets:[30,50,100,200,300], defaultRate:200},
+  {id:'FB-PLASTER-MAT', group:'Plaster & Immobilisation', name:'Plaster with Material', min:300, max:2000, presets:[300,500,750,1000,1500,2000], defaultRate:1000},
+  {id:'FB-PLASTER-LARGE', group:'Plaster & Immobilisation', name:'Plaster without Material — Large', min:1000, max:1000, presets:[1000], defaultRate:1000},
+  {id:'FB-PLASTER-SHORT', group:'Plaster & Immobilisation', name:'Plaster without Material — Short', min:500, max:500, presets:[500], defaultRate:500},
+  {id:'FB-PLASTER-SMALL', group:'Plaster & Immobilisation', name:'Plaster without Material — Smallest', min:250, max:250, presets:[250], defaultRate:250},
+
+  {id:'FB-INJ-IMIDSC', group:'Injection / IV', name:'Injection IM / ID / SC — Administration', min:30, max:50, presets:[30,50], defaultRate:50},
+  {id:'FB-INJ-IVDIRECT', group:'Injection / IV', name:'Injection IV — Direct Administration', min:50, max:100, presets:[50,100], defaultRate:100},
+  {id:'FB-IV-CANNULA', group:'Injection / IV', name:'IV with Cannula — Administration', min:30, max:100, presets:[30,50,100], defaultRate:100},
+  {id:'FB-INJ-MVI', group:'Injection / IV', name:'Injection MVI', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-D3', group:'Injection / IV', name:'Injection Vitamin D3 60K Unit', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-DECA100', group:'Injection / IV', name:'Injection Deca-Durabolin 100 mg', min:100, max:500, presets:[100,200,300,400,500], defaultRate:300},
+  {id:'FB-INJ-DECA50', group:'Injection / IV', name:'Injection Deca-Durabolin 50 mg', min:100, max:500, presets:[100,200,300,400,500], defaultRate:300},
+  {id:'FB-INJ-DECA25', group:'Injection / IV', name:'Injection Deca-Durabolin 25 mg', min:100, max:400, presets:[100,200,300,400], defaultRate:200},
+  {id:'FB-INJ-CTX-DIRECT', group:'Injection / IV', name:'Injection Ceftriaxone 1 g — Direct IV', min:100, max:200, presets:[100,150,200], defaultRate:150},
+  {id:'FB-INJ-CTX-FIRST', group:'Injection / IV', name:'Injection Ceftriaxone 1 g — With Cannula, First Dose', min:100, max:300, presets:[100,150,200,300], defaultRate:200},
+  {id:'FB-INJ-CTX-FOLLOW', group:'Injection / IV', name:'Injection Ceftriaxone 1 g — Cannula Follow-up Dose', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-CTXSUL', group:'Injection / IV', name:'Injection Ceftriaxone + Sulbactam 1.5 g', min:100, max:300, presets:[100,200,300], defaultRate:200},
+  {id:'FB-INJ-CTXTAZO', group:'Injection / IV', name:'Injection Ceftriaxone + Tazobactam', min:50, max:300, presets:[50,100,150,200,300], defaultRate:200},
+  {id:'FB-INJ-AMK500', group:'Injection / IV', name:'Injection Amikacin 500 mg', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-AMK250', group:'Injection / IV', name:'Injection Amikacin 250 mg', min:50, max:150, presets:[50,100,150], defaultRate:100},
+  {id:'FB-INJ-GENTA', group:'Injection / IV', name:'Injection Gentamicin 2 ml', min:50, max:150, presets:[50,100,150], defaultRate:100},
+  {id:'FB-INJ-DERIPHY', group:'Injection / IV', name:'Injection Deriphyllin 2 ml', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-DEXA', group:'Injection / IV', name:'Injection Dexamethasone 2 ml', min:100, max:200, presets:[100,150,200], defaultRate:150},
+  {id:'FB-INJ-AVIL', group:'Injection / IV', name:'Injection Avil 2 ml', min:100, max:200, presets:[100,150,200], defaultRate:150},
+  {id:'FB-INJ-LASIX', group:'Injection / IV', name:'Injection Lasix 2 ml', min:100, max:200, presets:[100,150,200], defaultRate:150},
+  {id:'FB-INJ-PANTO', group:'Injection / IV', name:'Injection Pantoprazole — 1 Vial', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-ONDAN', group:'Injection / IV', name:'Injection Ondansetron 2 ml', min:100, max:200, presets:[100,150,200], defaultRate:150},
+  {id:'FB-INJ-DICLO', group:'Injection / IV', name:'Injection Diclofenac Aqueous 1 ml', min:50, max:150, presets:[50,100,150], defaultRate:100},
+  {id:'FB-INJ-DROTA', group:'Injection / IV', name:'Injection Drotaverine 2 ml', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-BLUEVIT', group:'Injection / IV', name:'Injection Bluevit (B1+B6+B12) 2 ml', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-XYLO', group:'Injection / IV', name:'Injection Xylocaine', min:50, max:100, presets:[50,100], defaultRate:100},
+  {id:'FB-NEB-ASTH', group:'Nebulization', name:'Nebulization with Asthalin', min:30, max:50, presets:[30,50], defaultRate:50},
+  {id:'FB-NEB-DUO', group:'Nebulization', name:'Nebulization with Duolin', min:50, max:100, presets:[50,100], defaultRate:100},
+  {id:'FB-NEB-BUDE', group:'Nebulization', name:'Nebulization with Budecort', min:50, max:100, presets:[50,100], defaultRate:100},
+  {id:'FB-NEB-DUOBUDE', group:'Nebulization', name:'Nebulization with Duolin + Budecort', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-INJ-TT', group:'Injection / IV', name:'Tetanus Toxoid 0.5 ml', min:50, max:100, presets:[50,100], defaultRate:100},
+  {id:'FB-CANNULA-ONLY', group:'Injection / IV', name:'IV Cannula Only', min:50, max:200, presets:[50,100,150,200], defaultRate:150},
+  {id:'FB-CANNULA-FIX', group:'Injection / IV', name:'IV Cannula Fixation — Without Cannula', min:50, max:100, presets:[50,100], defaultRate:100},
+  {id:'FB-IV-MEDONLY', group:'Injection / IV', name:'Only IV Medication Administration', min:50, max:100, presets:[50,100], defaultRate:100},
+  {id:'FB-FBR', group:'Minor Procedure', name:'Foreign Body Removal', min:50, max:300, presets:[50,100,150,200,300], defaultRate:200},
+
+  {id:'FB-PATH', group:'Pathology', name:'Pathology Test — Custom Test Name & Amount', custom:true, min:0, max:null, presets:[], defaultRate:0},
+  {id:'FB-MED', group:'Medicines', name:'Medicine / Pharmacy — Total Amount', custom:true, min:0, max:null, presets:[], defaultRate:0}
 ];
-const TASK_STATUSES=['Pending','Done','Waiting','Not Done'];
-function isoToday(){return new Date().toISOString().slice(0,10)}
-function normalizeChild(c){
-  return {
-    currentStatus:'Active',
-    taskStatus:'Pending',
-    appointmentDate:'',
-    reminderDate:'',
-    nextAction:'',
-    homeMedicineQty:'',
-    lastContactDate:'',
-    statusNote:'',
-    registeredBy:'',
-    registeredAt:'',
-    lastUpdatedBy:'',
-    lastUpdatedAt:'',
-    ...c
-  };
-}
-function normalizedChildren(){return db.children.map(normalizeChild)}
-function statusClass(status){
-  const m={
-    'Active':'st-active',
-    'Ready for Swarnaprashan':'st-ready',
-    "Today's Dose Taken":'st-done',
-    'Appointment Fixed':'st-appt',
-    'Out of City':'st-away',
-    'Temporarily Hold - Health Issue':'st-hold',
-    'Swarnaprashan Stopped':'st-stop',
-    'Home Use Medicine':'st-home'
-  };
-  return m[status]||'st-active';
-}
-function taskClass(status){
-  return {'Done':'task-done','Pending':'task-pending','Waiting':'task-waiting','Not Done':'task-notdone'}[status]||'task-pending';
-}
-function childOperationalCounts(){
-  const arr=normalizedChildren(), today=isoToday();
-  return {
-    total:arr.length,
-    active:arr.filter(c=>['Active','Ready for Swarnaprashan','Appointment Fixed',"Today's Dose Taken",'Home Use Medicine'].includes(c.currentStatus)).length,
-    ready:arr.filter(c=>c.currentStatus==='Ready for Swarnaprashan').length,
-    doseToday:arr.filter(c=>c.currentStatus==="Today's Dose Taken").length,
-    apptToday:arr.filter(c=>c.appointmentDate===today).length,
-    remindersToday:arr.filter(c=>c.reminderDate===today && c.taskStatus!=='Done').length,
-    stopped:arr.filter(c=>c.currentStatus==='Swarnaprashan Stopped').length,
-    hold:arr.filter(c=>c.currentStatus==='Temporarily Hold - Health Issue').length,
-    home:arr.filter(c=>c.currentStatus==='Home Use Medicine').length
-  };
-}
-function callLink(mobile){return mobile?`tel:${String(mobile).replace(/\D/g,'')}`:'#'}
-function waLink(mobile,name=''){
-  const n=String(mobile||'').replace(/\D/g,'');
-  if(!n)return'#';
-  const withCountry=n.length===10?'91'+n:n;
-  return `https://wa.me/${withCountry}?text=${encodeURIComponent('Namaste. Mahamaya Clinic Swarnaprashan follow-up reminder for '+name+'.')}`;
-}
 
-const age=dob=>{if(!dob)return'-';const b=new Date(dob),n=new Date();let y=n.getFullYear()-b.getFullYear(),m=n.getMonth()-b.getMonth();if(m<0){y--;m+=12}return`${y}y ${m}m`};
-const scoreLabel=n=>['Poor','Reduced','Stable/Normal','Improved','Best'][Number(n)]||'-';
-const avg=o=>{const a=Object.values(o||{}).map(Number).filter(x=>!isNaN(x));return a.length?a.reduce((x,y)=>x+y,0)/a.length:null};
-const trend=(a,b)=>a==null||b==null?'<span class="stable">No baseline</span>':(+b>+a?'<span class="good">Improved ↑</span>':+b<+a?'<span class="bad">Reduced ↓</span>':'<span class="stable">Stable →</span>');
-const titles={dashboard:['Dashboard','Premium longitudinal Swarnaprashan clinical tracking'],clinical:['Clinical Workspace','Guided Save & Next workflow from profile to prescription'],children:['Children','Registry, baby photo, profile and clinical access'],followup:['Monthly Follow-up','Dose, growth, vitals, health, development and Ayurveda tracking'],analytics:['Growth & Analytics','Automatic visual longitudinal analysis'],vaccination:['Vaccination & Schedule','Vaccination record and upcoming session tracking'],documents:['Documents & Camera','Camera, gallery, file, PDF and manual card storage'],reports:['Reports & Prescription','Complete clinical printout, PDF, Share and WhatsApp'],knowledge:['Swarnaprashan Guide','Bilingual parent education, Pushya calendar, safety and evidence'],education:['Diet • Pathya • Lifestyle','Individualized parent guidance'],inventory:['Inventory & Stock','Procurement, stock, usage and consumable tracking'],backup:['Backup / Restore','Data portability and export'],settings:['Settings','Clinic identity and prescription details']};
-const tpl=id=>document.getElementById(id).content.cloneNode(true);
+let db=load();
 
-const AUTH_KEY='mahamaya_swarnaprashan_users_v1';
-const SESSION_KEY='mahamaya_swarnaprashan_session_v1';
-let MEMORY_SESSION=null;
-function getUsers(){
+function load(){
   try{
-    const raw=localStorage.getItem(AUTH_KEY);
-    if(!raw) return [];
-    const parsed=JSON.parse(raw);
-    return Array.isArray(parsed)?parsed:[];
-  }catch(e){ return []; }
+    const raw=localStorage.getItem(DB_KEY);
+    if(!raw) return structuredClone(seed);
+    const d=JSON.parse(raw);
+    for(const k of Object.keys(seed)) if(!(k in d)) d[k]=structuredClone(seed[k]);
+    return d;
+  }catch(e){return structuredClone(seed)}
 }
-function saveUsers(users){
-  try{ localStorage.setItem(AUTH_KEY,JSON.stringify(users)); }catch(e){}
+function save(action='Updated data'){
+  localStorage.setItem(DB_KEY,JSON.stringify(db));
+  db.audit.unshift({id:uid('AUD'),ts:nowISO(),action});
+  localStorage.setItem(DB_KEY,JSON.stringify(db));
 }
-const DEFAULT_AUTH_USERS=[];
-function seedUsers(){
-  let users=getUsers();
-  let changed=false;
-  for(const d of DEFAULT_AUTH_USERS){
-    const idx=users.findIndex(u=>String(u.loginId||'').toLowerCase()===d.loginId.toLowerCase());
-    if(idx<0){users.push({id:uid(),...d});changed=true}
-    else{
-      // Repair incomplete/corrupted default login records while preserving user-added recovery fields where possible.
-      const repaired={...d,...users[idx],loginId:d.loginId,name:users[idx].name||d.name,role:users[idx].role||d.role};
-      if(!repaired.password) repaired.password=d.password;
-      if(!repaired.mobile) repaired.mobile=d.mobile;
-      if(d.loginId==='drrajesh' && !repaired.email) repaired.email=d.email;
-      if(d.loginId==='drrajesh' && !repaired.recoveryEmail) repaired.recoveryEmail=d.recoveryEmail;
-      if(JSON.stringify(repaired)!==JSON.stringify(users[idx])){users[idx]=repaired;changed=true}
-    }
-  }
-  if(changed || !localStorage.getItem(AUTH_KEY)) saveUsers(users);
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800)}
+function modal(title,body,hint=''){
+  $('#modalTitle').textContent=title; $('#modalHint').textContent=hint; $('#modalBody').innerHTML=body; $('#modal').classList.remove('hidden');
 }
-function resetLoginAccess(){
-  clearSession();
-  setLoginStatus('Use your registered Firebase email and password.',true);
+function closeModal(){ $('#modal').classList.add('hidden') }
+$('#modalClose').onclick=closeModal;
+$('#modal').onclick=e=>{if(e.target.id==='modal')closeModal()};
+
+const pageMeta={
+ dashboard:['Dashboard','Clinic finance, stock, staff and daily audit at a glance.'],
+ billing:['Quick Billing','Fast patient billing with split payment support.'],
+ income:['Income','Track every clinic and professional income source.'],
+ expenses:['Expenses','Daily, recurring, medical, utility and other expenses.'],
+ inventory:['Inventory','Separate Ayurveda, Allopathy and operational stock.'],
+ vendors:['Vendors','Stockists, suppliers, printers, technicians and service parties.'],
+ staff:['Staff & Salary','Doctors, nursing, reception, therapists, cleaning and support staff.'],
+ swarnaprashan:['Swarnaprashan','Monthly Pushya-wise collection, stock use and staff accountability.'],
+ camps:['Camps / Seva','Free, sponsored and paid camps with full cost tracking.'],
+ assets:['Assets & Maintenance','Clinical equipment, furniture, interiors, repair, AMC and service history.'],
+ closing:['Daily Closing','Cash, UPI, expenses and daily reconciliation.'],
+ reports:['Reports','Operational summaries and management reports.'],
+ statement:['Statements','Bank-style clinic financial history for any selected period.'],
+ settings:['Settings','Clinic defaults and data management.']
+};
+let currentView='dashboard';
+let inventoryTab='Ayurveda Medicines';
+
+$$('#nav button').forEach(b=>b.onclick=()=>{currentView=b.dataset.view;$$('#nav button').forEach(x=>x.classList.toggle('active',x===b));render()});
+$('#quickAddBtn').onclick=quickEntry;
+$('#backupBtn').onclick=backup;
+
+function render(){
+  const [t,s]=pageMeta[currentView]; $('#pageTitle').textContent=t; $('#pageSubtitle').textContent=s;
+  const fn=views[currentView]; $('#view').innerHTML=fn?fn():'';
+  bindView();
 }
-function currentSession(){
-  if(MEMORY_SESSION) return MEMORY_SESSION;
-  try{
-    const raw=localStorage.getItem(SESSION_KEY);
-    if(!raw) return null;
-    const parsed=JSON.parse(raw);
-    MEMORY_SESSION=parsed;
-    return parsed;
-  }catch(e){return null}
+
+function monthPrefix(){return today().slice(0,7)}
+function todays(arr){return arr.filter(x=>(x.date||'').slice(0,10)===today())}
+function billReceived(b){return Number(b.cash||0)+Number(b.upi||0)+Number(b.card||0)+Number(b.bank||0)+Number(b.advance||0)}
+function billDue(b){return Math.max(0,Number(b.total||0)-billReceived(b))}
+function monthRows(arr){const p=monthPrefix();return arr.filter(x=>(x.date||'').slice(0,7)===p)}
+function invValue(filter=null){
+  const rows=filter?db.inventory.filter(x=>x.segment===filter):db.inventory;
+  return sum(rows,x=>Number(x.qty||0)*Number(x.purchaseRate||0))
 }
-function setSession(user){
-  MEMORY_SESSION={id:user.id||'failsafe',name:user.name,loginId:user.loginId,role:user.role,at:Date.now()};
-  try{localStorage.setItem(SESSION_KEY,JSON.stringify(MEMORY_SESSION));}catch(e){}
+function formatDate(d){
+  if(!d) return 'No date';
+  try{return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}catch{return d}
 }
-function clearSession(){
-  MEMORY_SESSION=null;
-  try{localStorage.removeItem(SESSION_KEY);}catch(e){}
+function reminderState(r){
+  if(r.done) return 'done';
+  if(!r.dueDate) return 'open';
+  return r.dueDate<today()?'overdue':r.dueDate===today()?'today':'upcoming';
 }
-function findUser(identifier){identifier=(identifier||'').trim().toLowerCase();return getUsers().find(u=>[u.loginId,u.mobile,u.email].filter(Boolean).map(v=>String(v).trim().toLowerCase()).includes(identifier))}
-function ensureAuthUI(){
-  const ses=currentSession();
-  const gate=$('#authGate'),appShell=$('#appShell');
-  if(!gate||!appShell)return;
-  if(ses){
-    gate.style.display='none';
-    appShell.classList.remove('auth-hidden');
-    if($('#currentUserBadge')) $('#currentUserBadge').textContent=`${ses.name} • ${ses.role}`;
-    showView('dashboard');
-  }else{
-    gate.style.display='grid';
-    appShell.classList.add('auth-hidden');
-  }
+function reminderPriorityClass(p='Medium'){
+  return ({High:'red',Medium:'orange',Low:'green'})[p]||'orange';
 }
-function bindAuth(){
-  seedUsers();
-  $('#loginBtn').onclick=loginUser;
-  $('#oneTapRajeshBtn').onclick=()=>setLoginStatus('Quick login is disabled. Use your registered Firebase email.',false);
-  $('#demoUsersBtn').onclick=toggleDemoUsers;
-  $('#forgotBtn').onclick=()=>{
-    const email=$('#loginIdentifier').value.trim();
-    if(!email || !email.includes('@')){setLoginStatus('Enter your registered email address first.',false);return}
-    const firebaseEmail=document.getElementById('firebaseEmail');
-    const firebaseForgotBtn=document.getElementById('firebaseForgotBtn');
-    if(!firebaseEmail || !firebaseForgotBtn){setLoginStatus('Firebase password reset is unavailable. Please refresh.',false);return}
-    firebaseEmail.value=email;
-    firebaseForgotBtn.click();
-    setLoginStatus('Password reset request sent. Check Inbox and Spam.',true);
+function upcomingReminders(limit=6){
+  return [...(db.reminders||[])]
+    .filter(r=>!r.done)
+    .sort((a,b)=>String(a.dueDate||'9999-99-99').localeCompare(String(b.dueDate||'9999-99-99')))
+    .slice(0,limit);
+}
+function reminderCounts(){
+  const rows=(db.reminders||[]).filter(r=>!r.done);
+  return {
+    total:rows.length,
+    overdue:rows.filter(r=>reminderState(r)==='overdue').length,
+    today:rows.filter(r=>reminderState(r)==='today').length,
+    upcoming:rows.filter(r=>reminderState(r)==='upcoming').length
   };
-  $('#resetLoginBtn').onclick=resetLoginAccess;
-  $('#forgotCloseBtn').onclick=()=>$('#forgotModal').classList.remove('open');
-  $('#forgotCancelBtn').onclick=()=>$('#forgotModal').classList.remove('open');
-  $('#recoverBtn').onclick=recoverPassword;
-  $('#logoutBtn').onclick=()=>{if(confirm('Logout current user?')){clearSession();ensureAuthUI()}};
-  $('#loginPassword').addEventListener('keydown',e=>{if(e.key==='Enter')loginUser()});
 }
-function toggleDemoUsers(){
-  const box=$('#demoUsersBox');
-  box.style.display=box.style.display==='none'?'block':'none';
-  if(box.style.display==='none') return;
-  const users=getUsers();
-  box.innerHTML=`<b>Available login accounts</b><div class="small-note">You can use Login ID, Mobile or Email shown below.</div>`+users.map(u=>`<div class="docitem"><b>${esc(u.name)}</b><div class="docmeta">Login ID: ${esc(u.loginId)} • Mobile: ${esc(u.mobile||'-')} • Role: ${esc(u.role)} • Password: ${esc(u.password)}</div></div>`).join('');
+function renderReminderList(rows){
+  if(!rows.length) return '<div class="empty">No reminders yet. Add your first reminder for payments, stock, maintenance, seva or follow-up tasks.</div>';
+  return `<div class="reminder-stack">${rows.map(r=>{
+    const state=reminderState(r), pri=reminderPriorityClass(r.priority), stateLabel=state==='overdue'?'Overdue':state==='today'?'Today':state==='done'?'Done':'Upcoming';
+    return `<div class="reminder-item ${state}"><div class="reminder-main"><div class="reminder-meta"><span class="badge ${pri}">${esc(r.priority||'Medium')}</span><span class="badge">${esc(r.category||'General')}</span><span class="reminder-date">${formatDate(r.dueDate)}</span></div><b>${esc(r.title||'Reminder')}</b><small>${esc(r.note||'')}${r.linkedView?` • Open in ${esc(pageMeta[r.linkedView]?.[0]||r.linkedView)}`:''}</small></div><div class="reminder-actions"><span class="reminder-state ${state}">${stateLabel}</span><button class="small" data-remdone="${esc(r.id)}">✓ Done</button><button class="small" data-remdelete="${esc(r.id)}">Delete</button></div></div>`;
+  }).join('')}</div>`;
 }
-
-function setLoginStatus(text,ok=false){
-  const el=$('#loginStatus'); if(!el)return;
-  el.textContent=text;
-  el.classList.toggle('ok',ok);
-  el.classList.toggle('error',!ok);
+function dailyWisdom(){
+  const msgs=[
+    'सेवा, शुचिता और समयपालन से ही समृद्धि स्थिर होती है।',
+    'कृष्ण कृपा, व्यवस्थित कार्य और शांत मन — यही सफल क्लिनिक की शक्ति है।',
+    'रोगी सेवा + स्पष्ट लेखा + समय पर follow-up = संतोष और प्रगति।'
+  ];
+  return msgs[new Date().getDate()%msgs.length];
 }
 
-async function loginUser(){
-  const identifier=$("#loginIdentifier").value.trim();
-  const password=$("#loginPassword").value;
-
-  if(!identifier || !password){
-    setLoginStatus("Please enter email and password.",false);
-    return;
-  }
-
-  if(!identifier.includes("@")){
-    setLoginStatus("Please use your registered email address for secure login.",false);
-    return;
-  }
-
-  const firebaseEmail=document.getElementById("firebaseEmail");
-  const firebasePassword=document.getElementById("firebasePassword");
-  const firebaseLoginBtn=document.getElementById("firebaseLoginBtn");
-
-  if(!firebaseEmail || !firebasePassword || !firebaseLoginBtn){
-    setLoginStatus("Secure Firebase login is unavailable. Please refresh the page.",false);
-    return;
-  }
-
-  firebaseEmail.value=identifier;
-  firebasePassword.value=password;
-
-  setLoginStatus("Signing in securely with Firebase...",true);
-  firebaseLoginBtn.click();
-}
-function recoverPassword(){
-  const identifier=$('#fpIdentifier').value.trim();
-  const recoveryEmail=$('#fpRecoveryEmail').value.trim().toLowerCase();
-  const newPassword=$('#fpNewPassword').value;
-  const confirmPassword=$('#fpConfirmPassword').value;
-  const users=getUsers();
-  const idx=users.findIndex(u=>[u.loginId,u.mobile,u.email].filter(Boolean).map(v=>String(v).trim().toLowerCase()).includes(identifier.toLowerCase()));
-  if(idx<0){alert('User not found.');return}
-  if(!newPassword || newPassword.length<4){alert('New password should be at least 4 characters.');return}
-  if(newPassword!==confirmPassword){alert('Password confirmation does not match.');return}
-  const savedRecovery=(users[idx].recoveryEmail||'').trim().toLowerCase();
-  if(savedRecovery && recoveryEmail!==savedRecovery){alert('Recovery email does not match this user record.');return}
-  if(!savedRecovery && !recoveryEmail){alert('This user has no recovery email yet. Ask admin to update it in Settings → User Management.');return}
-  users[idx].recoveryEmail=recoveryEmail||savedRecovery;
-  users[idx].password=newPassword;
-  saveUsers(users);
-  alert('Password reset successful. Please login with the new password.');
-  $('#forgotModal').classList.remove('open');
-  ['#fpIdentifier','#fpRecoveryEmail','#fpNewPassword','#fpConfirmPassword'].forEach(s=>$(s).value='');
-}
-function usersHtml(){
-  const users=getUsers();
-  return `<table class="user-table"><thead><tr><th>Name</th><th>Login</th><th>Mobile</th><th>Recovery</th><th>Role</th><th>Actions</th></tr></thead><tbody>${users.map(u=>`<tr><td>${esc(u.name)}</td><td>${esc(u.loginId)}${u.email?`<div class="small-note">${esc(u.email)}</div>`:''}</td><td>${esc(u.mobile||'-')}</td><td>${esc(u.recoveryEmail||'-')}</td><td>${esc(u.role||'-')}</td><td><button class="ghost" onclick="app.prefillUser('${u.id}')">Edit</button> <button class="ghost" onclick="app.deleteUser('${u.id}')">Delete</button></td></tr>`).join('')}</tbody></table>`;
-}
-function prefillUser(id){
-  const u=getUsers().find(x=>x.id===id); if(!u) return;
-  $('#u_id').value=u.id||''; $('#u_name').value=u.name||''; $('#u_login').value=u.loginId||''; $('#u_mobile').value=u.mobile||''; $('#u_email').value=u.email||''; $('#u_role').value=u.role||'Doctor'; $('#u_password').value=u.password||''; $('#u_recovery').value=u.recoveryEmail||'';
-}
-function deleteUser(id){
-  const users=getUsers(); const u=users.find(x=>x.id===id); if(!u) return; if(!confirm(`Delete user ${u.name}?`)) return;
-  saveUsers(users.filter(x=>x.id!==id));
-  if($('#usersList')) $('#usersList').innerHTML=usersHtml();
-}
-function saveUserFromSettings(){
-  const name=$('#u_name').value.trim(), loginId=$('#u_login').value.trim(), mobile=$('#u_mobile').value.trim(), email=$('#u_email').value.trim(), role=$('#u_role').value, password=$('#u_password').value, recoveryEmail=$('#u_recovery').value.trim(), id=$('#u_id').value;
-  if(!name || !loginId || !password){alert('Name, login ID and password are required.');return}
-  const users=getUsers();
-  if(users.some(u=>u.id!==id && String(u.loginId).toLowerCase()===loginId.toLowerCase())){alert('Login ID already exists.');return}
-  if(mobile && users.some(u=>u.id!==id && String(u.mobile)===mobile)){alert('Mobile already exists.');return}
-  if(email && users.some(u=>u.id!==id && String(u.email).toLowerCase()===email.toLowerCase())){alert('Email already exists.');return}
-  const obj={id:id||uid(),name,loginId,mobile,email,password,recoveryEmail,role};
-  const idx=users.findIndex(u=>u.id===obj.id);
-  if(idx>=0) users[idx]=obj; else users.push(obj);
-  saveUsers(users);
-  ['#u_id','#u_name','#u_login','#u_mobile','#u_email','#u_password','#u_recovery'].forEach(s=>$(s).value=''); $('#u_role').value='Doctor';
-  $('#usersList').innerHTML=usersHtml();
-  alert('User saved successfully.');
-}
-
-
-// IndexedDB file store
-let idb;
-function openIDB(){return new Promise((res,rej)=>{const r=indexedDB.open('swarnaprashan_docs_v2',1);r.onupgradeneeded=()=>r.result.createObjectStore('docs',{keyPath:'id'});r.onsuccess=()=>{idb=r.result;res(idb)};r.onerror=()=>rej(r.error)})}
-async function putDoc(d){if(!idb)await openIDB();return new Promise((res,rej)=>{const tx=idb.transaction('docs','readwrite');tx.objectStore('docs').put(d);tx.oncomplete=res;tx.onerror=()=>rej(tx.error)})}
-async function getDocs(){if(!idb)await openIDB();return new Promise((res,rej)=>{const r=idb.transaction('docs').objectStore('docs').getAll();r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
-async function delDoc(id){if(!idb)await openIDB();return new Promise((res,rej)=>{const tx=idb.transaction('docs','readwrite');tx.objectStore('docs').delete(id);tx.oncomplete=res;tx.onerror=()=>rej(tx.error)})}
-async function docById(id){return (await getDocs()).find(d=>d.id===id)}
-async function avatarUrl(c){if(!c?.photoDocId)return'';const d=await docById(c.photoDocId);return d?URL.createObjectURL(d.blob):''}
-
-function options(sel,blank=true){sel.innerHTML=(blank?'<option value="">Select child</option>':'')+db.children.map(c=>`<option value="${c.id}">${esc(c.name)} • ${esc(c.regId||c.id.slice(-5).toUpperCase())}</option>`).join('')}
-
-function letterhead(dateText='', rightHtml=''){
- return `<div class="letterhead">
-   <div class="letterhead-top">
-     <div class="clinic-identity">
-       <div class="letter-logo sparkle-mark">✨</div>
-       <div>
-         <div class="clinic-name">${esc(db.settings.clinicName||'MAHAMAYA CLINIC')}</div>
-         <div class="rx-title">${esc(db.settings.prescriptionTitle||'Swarnaprashan Digital Prescription')}</div>
-       </div>
-     </div>
-     <div class="letter-date">${rightHtml||esc(dateText||'')}</div>
-   </div>
-   <div class="doctor-strip">
-     <div class="doctor-card"><b>${esc(db.settings.doctor||'')}</b><span>${esc(db.settings.designation||'')}</span></div>
-     <div class="doctor-card"><b>${esc(db.settings.doctor2||'')}</b><span>${esc(db.settings.designation2||'')}</span></div>
-   </div>
-   <div class="clinic-address">${esc(db.settings.address||'')}</div>
- </div>`;
-}
-
-function showView(name){ if(!currentSession()) return; currentView=name; 
-  $$('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
-  $('#pageTitle').textContent=titles[name][0];$('#pageSubtitle').textContent=titles[name][1];
-  const v=$('#view');v.innerHTML='';v.appendChild(tpl(name+'Tpl'));
-  ({dashboard:renderDashboard,clinical:renderClinical,children:renderChildren,followup:renderFollowup,analytics:renderAnalytics,vaccination:renderVaccination,documents:renderDocuments,reports:renderReports,knowledge:renderKnowledge,education:renderEducation,inventory:renderInventory,backup:renderBackup,settings:renderSettings}[name]||(()=>{}))();
-}
-
-
-
-const DEFAULT_SALES_STAFF=['Dr Rajesh Sao','Dr Ravi Chandrakar','Miss Mansi','Other'];
-function salesStaffList(){
-  const raw=Array.isArray(db?.settings?.salesStaff)?db.settings.salesStaff:[];
-  return [...new Set([...DEFAULT_SALES_STAFF,...raw].filter(Boolean))];
-}
-function staffOptions(selected=''){
-  return salesStaffList().map(s=>`<option ${s===selected?'selected':''}>${esc(s)}</option>`).join('');
-}
-function paymentAdministeredBy(p){return p?.administeredBy||p?.soldBy||p?.recordedBy||'Unassigned'}
-function paymentReceivedBy(p){return p?.receivedBy||p?.soldBy||p?.recordedBy||'Unassigned'}
-function paymentStaff(p){return paymentReceivedBy(p)}
-function auditName(v){return v||'Not recorded (legacy)'}
-function latestClinicalForChild(childId){return (db.cases||[]).filter(x=>x.childId===childId).slice().sort((a,b)=>String(b.updatedAt||b.date||'').localeCompare(String(a.updatedAt||a.date||'')))[0]||null}
-function latestAdministeredClinical(childId){return (db.cases||[]).filter(x=>x.childId===childId&&x.administeredBy).slice().sort((a,b)=>String(b.updatedAt||b.date||'').localeCompare(String(a.updatedAt||a.date||'')))[0]||null}
-function childAudit(c){
-  const cs=latestAdministeredClinical(c.id),pay=latestPayment(c.id);
-  return {registeredBy:auditName(c.registeredBy),administeredBy:auditName(cs?.administeredBy),paymentBy:auditName(pay?paymentReceivedBy(pay):'')};
-}
-
-function staffFinanceSummary(scope='month'){
-  const now=new Date();
-  const inScope=(date)=>{
-    if(scope!=='month')return true;
-    if(!date)return false;
-    const d=new Date(String(date).slice(0,10)+'T00:00:00');
-    return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
-  };
-  const map={};
-  const ensure=(name)=>map[auditName(name)] ||= {registered:0,administered:0,paymentEntries:0,billed:0,collected:0,cash:0,upi:0,cardBank:0,credit:0,pending:0};
-  for(const c of (db.children||[])){
-    if(inScope(c.registeredAt||c.createdAt)) ensure(c.registeredBy).registered++;
-  }
-  for(const cs of (db.cases||[])){
-    if(cs.administeredBy && inScope(cs.date||cs.updatedAt)) ensure(cs.administeredBy).administered += Math.max(1,Number(cs.administeredQty)||1);
-  }
-  for(const p of (db.payments||[])){
-    if(!inScope(p.date||p.createdAt))continue;
-    // Legacy fallback: count payment-level administration only when there is no attributed clinical entry for same child/date.
-    if(p.administeredBy){
-      const hasClinical=(db.cases||[]).some(cs=>cs.childId===p.childId&&cs.administeredBy&&String(cs.date||'')===String(p.date||''));
-      if(!hasClinical) ensure(p.administeredBy).administered += Math.max(1,Number(p.quantity)||1);
-    }
-    const recv=paymentReceivedBy(p),x=ensure(recv),bal=paymentBalance(p),st=paymentStatus(p);
-    x.paymentEntries++;x.billed+=Number(p.amount)||0;x.collected+=Number(p.paid)||0;
-    if(p.method==='Cash')x.cash+=Number(p.paid)||0;
-    if(p.method==='UPI')x.upi+=Number(p.paid)||0;
-    if(['Card','Bank Transfer'].includes(p.method))x.cardBank+=Number(p.paid)||0;
-    if(['Credit / Udhari','Pay Later'].includes(st))x.credit+=bal;
-    if(['Pending','Part Paid'].includes(st))x.pending+=bal;
-  }
-  return map;
-}
-function inventoryEntries(){return db.inventory||[]}
-function inventoryBaseQty(e){
-  const q=Number(e.qty)||0;
-  if(e.item==='Swarnabrahma Yog Tablet'){
-    if(e.unit==='Box (150 tablets)')return q*150;
-    if(e.unit==='Strip (30 tablets)')return q*30;
-    return q;
-  }
-  if(['Cow Ghee','Honey'].includes(e.item)){
-    if(e.unit==='kg')return q*1000;
-    if(e.unit==='L')return q*1000;
-    return q; // g or ml
-  }
-  return q;
-}
-function inventoryDelta(e){
-  const base=inventoryBaseQty(e);
-  return ['Purchase','Adjustment +'].includes(e.action)?base:-base;
-}
-function inventoryStock(item){
-  return inventoryEntries().filter(e=>e.item===item).reduce((s,e)=>s+inventoryDelta(e),0);
-}
-function inventoryUnitLabel(item){
-  if(item==='Swarnabrahma Yog Tablet')return 'tablets';
-  if(item==='Cow Ghee')return 'g/ml';
-  if(item==='Honey')return 'g/ml';
-  if(item==='Feeding Spoon')return 'pieces';
-  return 'units';
-}
-function inventoryPurchaseValue(){
-  return inventoryEntries().filter(e=>e.action==='Purchase').reduce((s,e)=>s+(Number(e.totalCost)||0),0)
-}
-function inventoryUsageCount(action,item=''){
-  return inventoryEntries().filter(e=>e.action===action&&(!item||e.item===item)).reduce((s,e)=>s+inventoryBaseQty(e),0)
-}
-function renderStaffFinanceDashboard(){
-  const el=$('#staffFinancePanel');if(!el)return;
-  const m=staffFinanceSummary('month'),rows=Object.entries(m).sort((a,b)=>(b[1].administered+b[1].registered+b[1].paymentEntries)-(a[1].administered+a[1].registered+a[1].paymentEntries));
-  el.innerHTML=`<div class="card staff-finance-card">
-    <div class="cardhead">
-      <div><span class="eyebrow">STAFF AUDIT TRAIL • THIS MONTH</span><h3>Registration, Swarnaprashan administration & collections</h3><p class="muted">Three responsibilities are recorded separately: who registered the child, who administered Swarnaprashan, and who received/knew the payment status.</p></div>
-      <button class="linkbtn" onclick="app.showView('children')">Open Child Registry</button>
+function dashboard(){
+  const bills=todays(db.bills), inc=todays(db.incomes), exp=todays(db.expenses);
+  const billed=sum(bills,x=>x.total), received=sum(bills,billReceived)+sum(inc,x=>x.amount);
+  const expenses=sum(exp,x=>x.amount), due=sum(bills,billDue);
+  const low=db.inventory.filter(x=>Number(x.qty||0)<=Number(x.reorderLevel||0)).length;
+  const pendingVendor=sum(db.vendors,x=>x.outstanding);
+  const sw=monthRows(db.swarnaprashan);
+  const swReceived=sum(sw,x=>x.received);
+  const counts=reminderCounts();
+  const monthBills=monthRows(db.bills), monthIncomes=monthRows(db.incomes), monthExpenses=monthRows(db.expenses);
+  const monthReceived=sum(monthBills,billReceived)+sum(monthIncomes,x=>x.amount);
+  const monthSpent=sum(monthExpenses,x=>x.amount);
+  const monthSurplus=monthReceived-monthSpent;
+  const nextMaintenance=[...db.maintenance].filter(x=>x.nextDue||x.status==='Due'||x.status==='Overdue').sort((a,b)=>String(a.nextDue||'9999-99-99').localeCompare(String(b.nextDue||'9999-99-99'))).slice(0,3);
+  const recentIncome=[...db.incomes].reverse().slice(0,4);
+  const dueBills=[...db.bills].filter(b=>billDue(b)>0).sort((a,b)=>billDue(b)-billDue(a)).slice(0,4);
+  return `
+  <div class="hero dashboard-hero">
+    <div>
+      <span class="badge green">Ayurvedic Prosperity Dashboard</span>
+      <h3>${esc(db.settings.clinicName)}</h3>
+      <p>Welcome, ${esc(db.settings.owner||'Doctor')}. This dashboard is designed to feel calm, sacred and practical — keeping finance, stock, reminders and clinic priorities together in one soothing Ayurveda-inspired space.</p>
+      <div class="actions" style="margin-top:14px">
+        <button class="primary" data-action="bill">+ New Bill</button>
+        <button data-action="income">+ Add Income</button>
+        <button data-action="expense">+ Expense</button>
+        <button data-action="reminder">⏰ Reminder</button>
+      </div>
+      <div class="dashboard-wisdom">🙏 ${dailyWisdom()}</div>
     </div>
-    ${rows.length?`<div class="staff-finance-table staff-finance-wide staff-audit-wide">
-      <div class="staff-finance-head"><span>Staff</span><span>Registered</span><span>Doses</span><span>Payments</span><span>Collected</span><span>Cash</span><span>UPI</span><span>Pending</span><span>Credit/Udhari</span></div>
-      ${rows.map(([n,x])=>`<div class="staff-finance-row"><b>${esc(n)}</b><strong>${x.registered}</strong><strong>${x.administered}</strong><span>${x.paymentEntries}</span><strong>${money(x.collected)}</strong><span>${money(x.cash)}</span><span>${money(x.upi)}</span><span>${money(x.pending)}</span><span>${money(x.credit)}</span></div>`).join('')}
-    </div>`:'<p class="muted">No staff-attributed activity this month yet.</p>'}
+    <div class="hero-side dashboard-side">
+      <div>
+        <small class="muted">Today Received</small>
+        <b>${money(received)}</b>
+        <small class="muted">Expenses ${money(expenses)} • Due ${money(due)}</small>
+        <div class="prosperity-pill ${monthSurplus>=0?'good':'watch'}">This month ${monthSurplus>=0?'surplus':'balance'} ${money(monthSurplus)}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dashboard-shortcuts">
+    <button data-viewjump="statement"><span>📑</span><b>Financial Statement</b><small>1 day → 1 year • PDF • Share</small></button>
+    <button data-viewjump="reports"><span>📊</span><b>Reports</b><small>Monthly operational summary</small></button>
+    <button data-action="bill"><span>🧾</span><b>Quick Bill</b><small>Fast patient billing</small></button>
+    <button data-action="reminder"><span>⏰</span><b>Reminder</b><small>Payments • stock • tasks</small></button>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><span>Today Billing</span><b>${money(billed)}</b><small>${bills.length} bills</small></div>
+    <div class="kpi"><span>Today Received</span><b>${money(received)}</b><small>Bill + other income</small></div>
+    <div class="kpi"><span>Active Reminders</span><b>${counts.total}</b><small>${counts.overdue} overdue • ${counts.today} today</small></div>
+    <div class="kpi"><span>Patient Due</span><b>${money(due)}</b><small>Today bills</small></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="section-title"><div><h3>Main Operational Snapshot</h3><div class="muted">Everything important at one glance</div></div><button class="small" data-action="reminder">+ Add Reminder</button></div>
+      <div class="focus-grid">
+        <div class="focus-tile"><span>Low Stock</span><b>${low}</b><small>items need review</small></div>
+        <div class="focus-tile"><span>Vendor Outstanding</span><b>${money(pendingVendor)}</b><small>payables</small></div>
+        <div class="focus-tile"><span>Swarnaprashan</span><b>${money(swReceived)}</b><small>received this month</small></div>
+        <div class="focus-tile"><span>Maintenance Due</span><b>${db.maintenance.filter(x=>x.status==='Due'||x.status==='Overdue').length}</b><small>asset/service tasks</small></div>
+      </div>
+    </div>
+    <div class="card prayer-card">
+      <h3>Clinic Dharma & Prosperity</h3>
+      <div class="metric-list">
+        <div class="metric-row"><span>Owner / Admin</span><b>${esc(db.settings.owner||'-')}</b></div>
+        <div class="metric-row"><span>Cloud Status</span><b>${esc(document.getElementById('cloudLabel')?.textContent||'Local mode')}</b></div>
+        <div class="metric-row"><span>Monthly Received</span><b>${money(monthReceived)}</b></div>
+        <div class="metric-row"><span>Monthly Expenses</span><b>${money(monthSpent)}</b></div>
+        <div class="metric-row"><span>Operational Balance</span><b>${money(monthSurplus)}</b></div>
+      </div>
+      <div class="prayer-note">श्रीकृष्ण कृपा से सेवा, सद्भाव और सुव्यवस्थित कार्य निरंतर बढ़ते रहें।</div>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-top:14px">
+    <div class="card">
+      <div class="section-title"><div><h3>Important Reminders</h3><div class="muted">Overdue, today and upcoming reminders</div></div><button class="small" data-action="reminder">+ New</button></div>
+      ${renderReminderList(upcomingReminders(6))}
+    </div>
+    <div class="card">
+      <div class="section-title"><div><h3>What Needs Attention?</h3><div class="muted">Immediate actionable items</div></div><div class="actions"><button class="small" data-viewjump="statement">📑 Statement</button><button class="small" data-viewjump="reports">Reports</button></div></div>
+      <div class="alert-list">
+        <div class="alert ${low?'red':''}">${low} low/out-of-stock item(s)</div>
+        <div class="alert ${counts.overdue?'red':''}">${counts.overdue} reminder(s) overdue</div>
+        <div class="alert ${dueBills.length?'red':''}">${dueBills.length} bill(s) still having due amount</div>
+        <div class="alert">${money(pendingVendor)} vendor outstanding</div>
+      </div>
+      <h4>Due Bills</h4>
+      <div class="list-cards">${dueBills.map(b=>`<div class="item-row"><div><b>${esc(b.patient||'Patient')}</b><br><small>${formatDate(b.date)} • Due ${money(billDue(b))}</small></div></div>`).join('')||'<div class="empty">No due bills.</div>'}</div>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-top:14px">
+    <div class="card">
+      <div class="section-title"><div><h3>Inventory & Service Overview</h3><div class="muted">Stock health and vertical contribution</div></div><button class="small" data-viewjump="inventory">Open Inventory</button></div>
+      <div class="inventory-cards">
+        <div class="inv-card"><span class="muted">Ayurveda</span><b>${money(invValue('Ayurveda Medicines'))}</b></div>
+        <div class="inv-card"><span class="muted">Allopathy</span><b>${money(invValue('Allopathic Medicines'))}</b></div>
+        <div class="inv-card"><span class="muted">Low Stock</span><b>${low}</b></div>
+        <div class="inv-card"><span class="muted">Total Stock Value</span><b>${money(invValue())}</b></div>
+      </div>
+      <h4 style="margin-top:16px">This Month by Vertical</h4>
+      ${verticalSummary()}
+    </div>
+    <div class="card">
+      <div class="section-title"><div><h3>Recent Income & Maintenance</h3><div class="muted">Fresh activity snapshot</div></div><button class="small" data-viewjump="closing">Daily Closing</button></div>
+      <h4>Recent Income</h4>
+      <div class="list-cards">${recentIncome.map(x=>`<div class="item-row"><div><b>${esc(x.source||'Income')}</b><br><small>${formatDate(x.date)} • ${esc(x.mode||'-')}</small></div><b>${money(x.amount)}</b></div>`).join('')||'<div class="empty">No recent income.</div>'}</div>
+      <h4>Upcoming Maintenance / AMC</h4>
+      <div class="list-cards">${nextMaintenance.map(x=>`<div class="item-row"><div><b>${esc(x.asset||'Maintenance')}</b><br><small>${esc(x.category||'-')} • ${formatDate(x.nextDue||x.date)}</small></div><span class="badge ${x.status==='Overdue'?'red':x.status==='Due'?'orange':'green'}">${esc(x.status||'Planned')}</span></div>`).join('')||'<div class="empty">No maintenance schedules.</div>'}</div>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-top:14px">
+    <div class="card">
+      <h3>Recent Audit Activity</h3>
+      <div class="list-cards">${db.audit.slice(0,6).map(a=>`<div class="item-row"><div><b>${esc(a.action)}</b><br><small>${new Date(a.ts).toLocaleString()}</small></div></div>`).join('')||'<div class="empty">No activity yet.</div>'}</div>
+    </div>
+    <div class="card">
+      <h3>Quick Remembrance</h3>
+      <div class="dashboard-mantra">“कर्मण्येवाधिकारस्ते” — stay focused on service, accuracy and compassionate care.</div>
+      <p class="muted">Use reminders for due payments, stock purchase, maintenance, staff salary, Swarnaprashan events, camp planning and daily closing follow-up.</p>
+      <div class="actions"><button data-action="reminder">Set Reminder</button><button data-viewjump="settings">Open Settings</button></div>
+    </div>
   </div>`;
 }
-function renderInventoryDashboard(){
-  const el=$('#inventoryDash');if(!el)return;
-  const tab=inventoryStock('Swarnabrahma Yog Tablet'),ghee=inventoryStock('Cow Ghee'),honey=inventoryStock('Honey'),spoons=inventoryStock('Feeding Spoon');
-  el.innerHTML=`<div class="inventory-dash-strip">
-    <div><span>Swarnabrahma Stock</span><b>${Math.max(0,tab)} tablets</b></div>
-    <div><span>Cow Ghee Stock</span><b>${Math.max(0,ghee)} g/ml</b></div>
-    <div><span>Honey Stock</span><b>${Math.max(0,honey)} g/ml</b></div>
-    <div><span>Feeding Spoons</span><b>${Math.max(0,spoons)} pcs</b></div>
-    <button class="ghost" onclick="app.showView('inventory')">Open Stock Ledger</button>
+function verticalSummary(){
+  const rows=monthRows(db.bills);
+  const groups={};
+  rows.forEach(b=>(b.items||[]).forEach(i=>groups[i.group]=(groups[i.group]||0)+Number(i.amount||0)));
+  const keys=['Consultation','Orthopedic/Spine','Panchakarma','Ayurvedic Procedures','Plaster & Immobilisation','Suturing & Wound Care','Injection / IV','Documents'];
+  return `<div class="metric-list">${keys.map(k=>`<div class="metric-row"><span>${esc(k)}</span><b>${money(groups[k]||0)}</b></div>`).join('')}</div>`;
+}
+function billing(){
+  const rows=[...db.bills].reverse();
+  return `<div class="section-title"><div><h3>Patient Bills</h3><div class="muted">Fast billing, collections and due tracking</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary" data-action="bill">+ New Bill</button></div></div>
+  ${table(rows,['Date','Patient','Services','Total','Received','Due','Mode'],b=>[
+    esc(b.date),esc(b.patient),esc((b.items||[]).map(i=>i.name).join(', ')),money(b.total),money(billReceived(b)),money(billDue(b)),esc(b.mode||'Split')
+  ])}`;
+}
+function income(){
+  return `<div class="section-title"><div><h3>Income Ledger</h3><div class="muted">Track every clinic and professional income source</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary" data-action="income">+ Add Income</button></div></div>
+  ${table([...db.incomes].reverse(),['Date','Source','Category','Amount','Mode','Handled By'],x=>[esc(x.date),esc(x.source),esc(x.category),money(x.amount),esc(x.mode),esc(x.handledBy||'-')])}`;
+}
+function expenses(){
+  return `<div class="section-title"><div><h3>Expense Ledger</h3><div class="muted">Expenses, payables and operational cost control</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary" data-action="expense">+ Add Expense</button></div></div>
+  ${table([...db.expenses].reverse(),['Date','Expense','Category','Amount','Mode','Paid To','Handled By'],x=>[esc(x.date),esc(x.name),esc(x.category),money(x.amount),esc(x.mode),esc(x.paidTo||'-'),esc(x.handledBy||'-')])}`;
+}
+const invTabs=['Ayurveda Medicines','Allopathic Medicines','Injection/IV & Procedure','Dressing/Suturing/POP','Panchakarma Materials','Orthopedic Supports','Printing & Stationery','General Consumables'];
+function inventory(){
+  const rows=db.inventory.filter(x=>x.segment===inventoryTab);
+  return `<div class="module-tabs">${invTabs.map(t=>`<button data-invtab="${esc(t)}" class="${t===inventoryTab?'active':''}">${esc(t)}</button>`).join('')}</div>
+  <div class="section-title"><div><h3>${esc(inventoryTab)}</h3><div class="muted">${rows.length} items • Stock value ${money(sum(rows,x=>Number(x.qty)*Number(x.purchaseRate)))}</div></div><button class="primary" data-action="inventory">+ Add Stock Item</button></div>
+  ${table(rows,['Item','Brand/Generic','Qty','Purchase','MRP/Sale','Vendor','Batch/Expiry','Status'],x=>[
+    esc(x.name),esc([x.generic,x.brand].filter(Boolean).join(' • ')||'-'),esc(x.qty),money(x.purchaseRate),money(x.saleRate||x.mrp),esc(x.vendor||'-'),esc([x.batch,x.expiry].filter(Boolean).join(' • ')||'-'),Number(x.qty)<=Number(x.reorderLevel)?'<span class="badge red">Low Stock</span>':'<span class="badge green">OK</span>'
+  ])}`;
+}
+function vendors(){
+  return `<div class="section-title"><div><h3>Vendor / Party Master</h3><div class="muted">Suppliers, purchase history and outstanding management</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary" data-action="vendor">+ Add Vendor</button></div></div>
+  ${table(db.vendors,['Party','Type','Contact','Total Purchase','Paid','Outstanding','Actions'],x=>[
+    esc(x.name),esc(x.type),esc(x.phone||'-'),money(x.totalPurchase),money(x.paid),money(x.outstanding),
+    `<a href="${x.phone?'tel:'+esc(x.phone):'#'}">Call</a> ${x.phone?`• <a href="https://wa.me/91${esc(x.phone.replace(/\D/g,''))}" target="_blank">WhatsApp</a>`:''}`
+  ])}`;
+}
+function staff(){
+  return `<div class="section-title"><div><h3>Staff & Payroll</h3><div class="muted">Team details, salary and pending accountability</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary" data-action="staff">+ Add Staff</button></div></div>
+  ${table(db.staff,['Name','Role','Salary Type','Rate/Salary','Advance','Paid','Pending','Contact'],x=>[
+    esc(x.name),esc(x.role),esc(x.salaryType),money(x.salary),money(x.advance),money(x.paid),money(Math.max(0,Number(x.salary)-Number(x.advance)-Number(x.paid))),esc(x.phone||'-')
+  ])}`;
+}
+function swarnaprashan(){
+  const rows=[...db.swarnaprashan].reverse(), m=monthRows(db.swarnaprashan);
+  return `<div class="kpis">
+    <div class="kpi"><span>Children / Entries</span><b>${m.length}</b><small>This month</small></div>
+    <div class="kpi"><span>Billing</span><b>${money(sum(m,x=>x.billed))}</b></div>
+    <div class="kpi"><span>Received</span><b>${money(sum(m,x=>x.received))}</b></div>
+    <div class="kpi"><span>Pending</span><b>${money(sum(m,x=>Number(x.billed)-Number(x.received)))}</b></div>
+  </div>
+  <div class="section-title"><div><h3>Monthly Swarnaprashan Ledger</h3><div class="muted">Pushya-wise activity, billing and administration tracking</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary" data-action="swarnaprashan">+ Add Entry</button></div></div>
+  ${table(rows,['Date','Child / Event','Clinic Dose','Home Use','Billing','Received','Mode','Administered By','Payment By'],x=>[
+    esc(x.date),esc(x.child),esc(x.clinicDose),esc(x.homeUse),money(x.billed),money(x.received),esc(x.mode),esc(x.administeredBy||'-'),esc(x.paymentBy||'-')
+  ])}`;
+}
+function camps(){
+  return `<div class="section-title"><div><h3>Camp / Seva Cost Centres</h3><div class="muted">Events, seva and sponsor-backed outreach management</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary" data-action="camp">+ Add Camp</button></div></div>
+  ${table(db.camps,['Date','Camp','Type','Patients','Expense','Donation/Sponsor','Net Clinic Contribution','Location'],x=>[
+    esc(x.date),esc(x.name),esc(x.type),esc(x.patients),money(x.expense),money(x.support),money(Math.max(0,Number(x.expense)-Number(x.support))),esc(x.location||'-')
+  ])}`;
+}
+function assets(){
+  return `<div class="grid2">
+    <div class="card">
+      <div class="section-title"><div><h3>Assets / Equipment</h3><div class="muted">Clinical and non-clinical asset overview</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary small" data-action="asset">+ Add Asset</button></div></div>
+      ${table(db.assets,['Asset','Segment','Location','Cost','Status','Next Service'],x=>[esc(x.name),esc(x.segment),esc(x.location||'-'),money(x.cost),esc(x.status),esc(x.nextService||'-')])}
+    </div>
+    <div class="card">
+      <div class="section-title"><div><h3>Repair / Maintenance / AMC</h3><div class="muted">Schedule service, due dates and repair follow-up</div></div><div class="actions"><button data-action="reminder">⏰ Reminder</button><button class="primary small" data-action="maintenance">+ Add Maintenance</button></div></div>
+      ${table(db.maintenance,['Date','Asset / Work','Category','Vendor','Cost','Status','Next Due'],x=>[esc(x.date),esc(x.asset),esc(x.category),esc(x.vendor||'-'),money(x.cost),esc(x.status),esc(x.nextDue||'-')])}
+    </div>
   </div>`;
 }
-
-const PAYMENT_STATUSES=['Paid','Part Paid','Pending','Credit / Udhari','Pay Later','Home Use - Already Paid','Complimentary / Free','Waived / No Charge'];
-const PAYMENT_METHODS=['Cash','UPI','Card','Bank Transfer','Credit / Udhari','Pay Later','Home Use Prepaid','Complimentary / Free','Other'];
-
-function childPayments(childId){
-  return (db.payments||[]).filter(p=>p.childId===childId).sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
+function closing(){
+  const d=today();
+  const bills=todays(db.bills), inc=todays(db.incomes), exp=todays(db.expenses);
+  const cashIn=sum(bills,x=>x.cash)+sum(inc,x=>x.mode==='Cash'?x.amount:0);
+  const cashOut=sum(exp,x=>x.mode==='Cash'?x.amount:0);
+  const upi=sum(bills,x=>x.upi)+sum(inc,x=>x.mode==='UPI'?x.amount:0);
+  const expAll=sum(exp,x=>x.amount);
+  const latest=db.closings.find(x=>x.date===d);
+  return `<div class="grid2">
+    <div class="card">
+      <h3>Today's Reconciliation</h3>
+      <div class="metric-list">
+        <div class="metric-row"><span>Cash In</span><b>${money(cashIn)}</b></div>
+        <div class="metric-row"><span>Cash Expense</span><b>${money(cashOut)}</b></div>
+        <div class="metric-row"><span>Net Cash Movement</span><b>${money(cashIn-cashOut)}</b></div>
+        <div class="metric-row"><span>UPI Received</span><b>${money(upi)}</b></div>
+        <div class="metric-row"><span>Total Expenses</span><b>${money(expAll)}</b></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Close Day</h3>
+      ${latest?`<div class="alert"><b>Closed.</b> Expected ${money(latest.expected)} • Actual ${money(latest.actual)} • Difference ${money(latest.difference)}</div>`:
+      `<div class="form-grid">
+        <label>Opening Cash<input id="closeOpening" type="number" value="0"></label>
+        <label>Actual Cash Count<input id="closeActual" type="number" value="0"></label>
+        <label class="full">Difference Reason / Notes<textarea id="closeNotes"></textarea></label>
+        <div class="full"><button class="primary" id="closeDayBtn">Close & Lock Day</button></div>
+      </div>`}
+    </div>
+  </div>`;
 }
-function latestPayment(childId){return childPayments(childId).at(-1)||null}
-function paymentBalance(p){return Math.max(0,(Number(p?.amount)||0)-(Number(p?.paid)||0))}
-function paymentStatus(p){
-  if(!p)return 'Not Recorded';
-  if(p.status)return p.status;
-  const amt=Number(p.amount)||0, paid=Number(p.paid)||0;
-  if(amt<=0)return 'Complimentary / Free';
-  if(paid>=amt)return 'Paid';
-  if(paid>0)return 'Part Paid';
-  return 'Pending';
+function reports(){
+  const mb=monthRows(db.bills), mi=monthRows(db.incomes), me=monthRows(db.expenses);
+  const billed=sum(mb,x=>x.total), received=sum(mb,billReceived)+sum(mi,x=>x.amount), exp=sum(me,x=>x.amount);
+  return `<div class="kpis">
+    <div class="kpi"><span>Month Billing</span><b>${money(billed)}</b></div>
+    <div class="kpi"><span>Month Received</span><b>${money(received)}</b></div>
+    <div class="kpi"><span>Month Expenses</span><b>${money(exp)}</b></div>
+    <div class="kpi"><span>Operational Surplus</span><b>${money(received-exp)}</b></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><h3>Payment Modes</h3>${paymentModeReport(mb)}</div>
+    <div class="card"><h3>Expense Categories</h3>${categoryReport(me,'category','amount')}</div>
+    <div class="card"><h3>Service Mix</h3>${serviceMix(mb)}</div>
+    <div class="card"><h3>Stock Value</h3>${inventoryValueReport()}</div>
+  </div>`;
 }
-function paymentStatusClass(s){
-  if(['Paid','Home Use - Already Paid'].includes(s))return 'pay-paid';
-  if(['Part Paid'].includes(s))return 'pay-part';
-  if(['Pending','Pay Later'].includes(s))return 'pay-pending';
-  if(['Credit / Udhari'].includes(s))return 'pay-credit';
-  if(['Complimentary / Free','Waived / No Charge'].includes(s))return 'pay-free';
-  if(s==='Not Recorded')return 'pay-none';
-  return 'pay-none';
+let statementPresetDays=30;
+function dateShift(days){
+  const d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()+days);
+  return d.toISOString().slice(0,10);
 }
-function money(n){return '₹'+(Number(n)||0).toLocaleString('en-IN',{maximumFractionDigits:2})}
-
-function currentSwarnaprashanRate(){
-  const r=Number(db?.settings?.swarnaprashanRate);
-  return Number.isFinite(r)&&r>=0?r:250;
+function selectedStatementRange(){
+  const from=$('#stmtFrom')?.value||dateShift(-(statementPresetDays-1));
+  const to=$('#stmtTo')?.value||today();
+  return {from,to};
 }
-function expectedDoseBilling(scope='month'){
-  const now=new Date();
-  const entries=(db.payments||[]).filter(p=>{
-    if(scope!=='month')return true;
-    const d=new Date((p.date||'')+'T00:00:00');
-    return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
+function inRange(x,from,to){
+  const d=String(x.date||'').slice(0,10);
+  return d && d>=from && d<=to;
+}
+function statementTransactions(from,to){
+  const rows=[];
+  db.bills.filter(x=>inRange(x,from,to)).forEach(b=>{
+    const received=billReceived(b), due=billDue(b);
+    rows.push({date:b.date,type:'Patient Bill',ref:b.id,party:b.patient||'Patient',category:(b.items||[]).map(i=>i.group).filter(Boolean).join(', ')||'Clinical Service',inflow:received,outflow:0,due,note:b.notes||'',mode:['Cash','UPI','Card','Bank','Advance'].filter(k=>Number(b[k.toLowerCase()]||0)>0).join(' + ')});
   });
-  const doseEntries=entries.filter(p=>String(p.purpose||'').toLowerCase().includes('swarnaprashan'));
-  const expected=doseEntries.reduce((s,p)=>s+(Number(p.amount)||currentSwarnaprashanRate()),0);
-  return {count:doseEntries.length,expected};
+  db.incomes.filter(x=>inRange(x,from,to)).forEach(x=>{
+    rows.push({date:x.date,type:'Other Income',ref:x.id,party:x.source||'Income',category:x.category||'Other Income',inflow:Number(x.amount||0),outflow:0,due:0,note:x.notes||'',mode:x.mode||''});
+  });
+  db.expenses.filter(x=>inRange(x,from,to)).forEach(x=>{
+    rows.push({date:x.date,type:'Expense',ref:x.id,party:x.paidTo||x.name||'Expense',category:x.category||'Expense',inflow:0,outflow:Number(x.amount||0),due:x.status==='Pending'?Number(x.amount||0):0,note:x.notes||'',mode:x.mode||''});
+  });
+  return rows.sort((a,b)=>String(a.date).localeCompare(String(b.date))||String(a.type).localeCompare(String(b.type)));
+}
+function stmtPeriodLabel(days){
+  return ({1:'1 Day',7:'1 Week',14:'2 Weeks',21:'3 Weeks',30:'1 Month',60:'2 Months',90:'3 Months',180:'6 Months',270:'9 Months',365:'1 Year'})[days]||`${days} Days`;
+}
+function statement(){
+  const to=today(), from=dateShift(-(statementPresetDays-1));
+  return `
+  <div class="statement-hero card">
+    <div>
+      <span class="badge green">Financial History & Audit</span>
+      <h3>Clinic Financial Statement</h3>
+      <p class="muted">Bank-statement style view of patient receipts, other income and expenses. Select a period, review the ledger, then print/save PDF or share a summary.</p>
+    </div>
+    <div class="statement-version">Mahamaya Clinic OS • V1.6</div>
+  </div>
+
+  <div class="card statement-controls">
+    <div class="section-title"><div><h3>Select Period</h3><div class="muted">Quick intervals or custom From–To dates</div></div><span class="badge orange" id="stmtPeriodBadge">${stmtPeriodLabel(statementPresetDays)}</span></div>
+    <div class="statement-presets">
+      ${[1,7,14,21,30,60,90,180,270,365].map(d=>`<button class="small ${d===statementPresetDays?'active':''}" data-stmtdays="${d}">${stmtPeriodLabel(d)}</button>`).join('')}
+    </div>
+    <div class="form-grid statement-date-grid">
+      <label>From<input id="stmtFrom" type="date" value="${from}"></label>
+      <label>To<input id="stmtTo" type="date" value="${to}"></label>
+      <div class="full actions">
+        <button class="primary" id="stmtGenerateBtn">Generate Statement</button>
+        <button id="stmtPrintBtn">🖨 Print / Save PDF</button>
+        <button id="stmtCsvBtn">⬇ CSV</button>
+        <button id="stmtShareBtn">🟢 WhatsApp / Share</button>
+      </div>
+    </div>
+  </div>
+  <div id="statementOutput">${statementOutput(from,to)}</div>`;
+}
+function statementOutput(from,to){
+  const rows=statementTransactions(from,to);
+  const inflow=sum(rows,x=>x.inflow), outflow=sum(rows,x=>x.outflow), due=sum(rows,x=>x.due), net=inflow-outflow;
+  const bills=db.bills.filter(x=>inRange(x,from,to));
+  const expenses=db.expenses.filter(x=>inRange(x,from,to));
+  const modes={Cash:0,UPI:0,Card:0,Bank:0,Advance:0};
+  bills.forEach(x=>Object.keys(modes).forEach(k=>modes[k]+=Number(x[k.toLowerCase()]||0)));
+  db.incomes.filter(x=>inRange(x,from,to)).forEach(x=>{if(modes[x.mode]!=null)modes[x.mode]+=Number(x.amount||0)});
+  return `
+    <div class="statement-print-head">
+      <div><b>${esc(db.settings.clinicName)}</b><br><small>${esc(db.settings.owner||'')}</small></div>
+      <div><b>Financial Statement</b><br><small>${formatDate(from)} → ${formatDate(to)}</small></div>
+    </div>
+    <div class="kpis statement-kpis">
+      <div class="kpi"><span>Total Received</span><b>${money(inflow)}</b><small>${bills.length} patient bill(s) + other income</small></div>
+      <div class="kpi"><span>Total Expenses</span><b>${money(outflow)}</b><small>${expenses.length} expense entry/entries</small></div>
+      <div class="kpi"><span>Net Operational</span><b>${money(net)}</b><small>${net>=0?'Surplus':'Deficit'} in selected period</small></div>
+      <div class="kpi"><span>Recorded Due</span><b>${money(due)}</b><small>Patient/pending amount context</small></div>
+    </div>
+    <div class="grid2 statement-summary-grid">
+      <div class="card"><h3>Collection Modes</h3><div class="metric-list">${Object.entries(modes).map(([k,v])=>`<div class="metric-row"><span>${k}</span><b>${money(v)}</b></div>`).join('')}</div></div>
+      <div class="card"><h3>Period Snapshot</h3><div class="metric-list">
+        <div class="metric-row"><span>From</span><b>${formatDate(from)}</b></div>
+        <div class="metric-row"><span>To</span><b>${formatDate(to)}</b></div>
+        <div class="metric-row"><span>Transactions</span><b>${rows.length}</b></div>
+        <div class="metric-row"><span>Generated</span><b>${new Date().toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'})}</b></div>
+      </div></div>
+    </div>
+    <div class="card statement-ledger-card">
+      <div class="section-title"><div><h3>Date-wise Ledger</h3><div class="muted">Chronological receipts and expenses</div></div><span class="badge">${rows.length} entries</span></div>
+      ${rows.length?`<div class="table-wrap statement-table"><table><thead><tr><th>Date</th><th>Type / Ref</th><th>Party / Patient</th><th>Category</th><th>Mode</th><th>Received</th><th>Expense</th><th>Due</th><th>Note</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${formatDate(r.date)}</td><td><b>${esc(r.type)}</b><br><small>${esc(r.ref||'')}</small></td><td>${esc(r.party)}</td><td>${esc(r.category)}</td><td>${esc(r.mode||'-')}</td><td class="money-in">${r.inflow?money(r.inflow):'-'}</td><td class="money-out">${r.outflow?money(r.outflow):'-'}</td><td>${r.due?money(r.due):'-'}</td><td>${esc(r.note||'')}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No transactions in this period.</div>'}
+    </div>`;
+}
+function refreshStatement(){
+  const {from,to}=selectedStatementRange();
+  if(from>to){alert('From date cannot be after To date.');return}
+  $('#statementOutput').innerHTML=statementOutput(from,to);
+  $('#stmtPeriodBadge').textContent=`${formatDate(from)} → ${formatDate(to)}`;
+}
+function statementShareText(){
+  const {from,to}=selectedStatementRange(), rows=statementTransactions(from,to);
+  const inflow=sum(rows,x=>x.inflow), outflow=sum(rows,x=>x.outflow), due=sum(rows,x=>x.due), net=inflow-outflow;
+  return `${db.settings.clinicName} — Financial Statement
+Period: ${formatDate(from)} to ${formatDate(to)}
+Total received: ${money(inflow)}
+Total expenses: ${money(outflow)}
+Net operational: ${money(net)}
+Recorded due: ${money(due)}
+Transactions: ${rows.length}
+Generated from Mahamaya Clinic OS V1.6`;
+}
+function shareStatement(){
+  const text=statementShareText();
+  if(navigator.share){navigator.share({title:'Mahamaya Clinic Financial Statement',text}).catch(()=>{});return}
+  window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+}
+function csvEscape(v){return `"${String(v??'').replaceAll('"','""')}"`}
+function downloadStatementCSV(){
+  const {from,to}=selectedStatementRange(), rows=statementTransactions(from,to);
+  const data=[['Date','Type','Reference','Party/Patient','Category','Mode','Received','Expense','Due','Note'],...rows.map(r=>[r.date,r.type,r.ref,r.party,r.category,r.mode,r.inflow,r.outflow,r.due,r.note])];
+  const blob=new Blob([data.map(row=>row.map(csvEscape).join(',')).join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Mahamaya-Clinic-Statement-${from}-to-${to}.csv`;a.click();URL.revokeObjectURL(a.href);toast('Statement CSV downloaded');
+}
+function printStatement(){
+  document.body.classList.add('statement-printing');
+  setTimeout(()=>{window.print();setTimeout(()=>document.body.classList.remove('statement-printing'),400)},40);
 }
 
-function paymentSummary(scope='all'){
-  const list=(db.payments||[]).filter(p=>{
-    if(scope==='month'){
-      const d=new Date((p.date||'')+'T00:00:00'),now=new Date();
-      return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
+function settings(){
+  return `<div class="grid2">
+    <div class="card">
+      <h3>Clinic Settings</h3>
+      <div class="form-grid">
+        <label>Clinic Name<input id="setClinicName" value="${esc(db.settings.clinicName)}"></label>
+        <label>Owner / Super Admin<input id="setOwner" value="${esc(db.settings.owner)}"></label>
+        <label>Consultation Rate<input id="setConsult" type="number" value="${db.settings.consultationRate}"></label>
+        <label>Follow-up Rate<input id="setFollow" type="number" value="${db.settings.followupRate}"></label>
+        <div class="full"><button class="primary" id="saveSettingsBtn">Save Settings</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Data Management</h3>
+      <div class="actions">
+        <button id="settingsBackupBtn">Download Backup</button>
+        <button id="restoreBtn">Restore JSON</button>
+        <button class="danger" id="resetBtn">Reset Local Data</button>
+      </div>
+      <p class="muted">Local-first safety remains active. Cloud sync/login configuration is preserved. Keep regular JSON backups for independent recovery.</p>
+    </div>
+  </div>`;
+}
+const views={dashboard,billing,income,expenses,inventory,vendors,staff,swarnaprashan,camps,assets,closing,reports,statement,settings};
+
+function table(rows,heads,rowfn){
+  if(!rows.length)return '<div class="empty">No records yet.</div>';
+  return `<div class="table-wrap"><table><thead><tr>${heads.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${rowfn(r).map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+function categoryReport(rows,key,val){
+  const m={};rows.forEach(x=>m[x[key]||'Other']=(m[x[key]||'Other']||0)+Number(x[val]||0));
+  return `<div class="metric-list">${Object.entries(m).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="metric-row"><span>${esc(k)}</span><b>${money(v)}</b></div>`).join('')||'<div class="empty">No data.</div>'}</div>`;
+}
+function paymentModeReport(rows){
+  const m={Cash:0,UPI:0,Card:0,Bank:0,Advance:0};
+  rows.forEach(x=>Object.keys(m).forEach(k=>m[k]+=Number(x[k.toLowerCase()]||0)));
+  return `<div class="metric-list">${Object.entries(m).map(([k,v])=>`<div class="metric-row"><span>${k}</span><b>${money(v)}</b></div>`).join('')}</div>`;
+}
+function serviceMix(rows){
+  const m={}; rows.forEach(b=>(b.items||[]).forEach(i=>m[i.group]=(m[i.group]||0)+Number(i.amount||0)));
+  return `<div class="metric-list">${Object.entries(m).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="metric-row"><span>${esc(k)}</span><b>${money(v)}</b></div>`).join('')||'<div class="empty">No data.</div>'}</div>`;
+}
+function inventoryValueReport(){
+  const m={};db.inventory.forEach(x=>m[x.segment]=(m[x.segment]||0)+Number(x.qty||0)*Number(x.purchaseRate||0));
+  return `<div class="metric-list">${Object.entries(m).map(([k,v])=>`<div class="metric-row"><span>${esc(k)}</span><b>${money(v)}</b></div>`).join('')||'<div class="empty">No data.</div>'}</div>`;
+}
+
+function quickEntry(){
+  modal('Quick Entry',`<div class="grid2">
+    <button class="primary" data-action="bill">🧾 Patient Bill</button>
+    <button data-action="income">₹ Other Income</button>
+    <button data-action="expense">💸 Expense</button>
+    <button data-action="inventory">📦 Stock Item</button>
+    <button data-action="vendor">🏢 Vendor</button>
+    <button data-action="swarnaprashan">🧒 Swarnaprashan</button>
+    <button data-action="maintenance">🛠 Maintenance</button>
+    <button data-action="reminder">⏰ Reminder</button>
+  </div>`,'Choose the transaction or reminder you want to enter.');
+  bindModalActions();
+}
+function billModal(){
+  const opts=BILLING_CATALOG.map(s=>{
+    const range=s.max==null?'Enter amount':s.min===s.max?money(s.min):`${money(s.min)}–${money(s.max)}`;
+    return `<option value="${s.id}">${esc(s.group)} — ${esc(s.name)} (${range})</option>`;
+  }).join('');
+
+  modal('New Patient Bill',`<div class="form-grid flexible-billing-form">
+    <label>Date<input id="bDate" type="date" value="${today()}"></label>
+    <label>Patient Name<input id="bPatient" placeholder="Patient name"></label>
+
+    <label class="full">Service
+      <select id="bService">${opts}</select>
+    </label>
+
+    <div id="billingRangeCard" class="full billing-range-card"></div>
+
+    <label id="bCustomNameWrap" class="full hidden">Test / Item Name
+      <input id="bCustomName" placeholder="e.g. CBC / LFT / RFT / Total medicines">
+    </label>
+
+    <label>Qty<input id="bQty" type="number" value="1" min="1" step="1"></label>
+    <label>Selected Rate ₹
+      <input id="bRate" type="number" min="0" step="1">
+    </label>
+
+    <label class="full">Rate Decision / Concession Note
+      <select id="bRateReason">
+        <option>Standard clinic rate</option>
+        <option>Compassionate concession</option>
+        <option>Financial hardship concession</option>
+        <option>Seva / Free service</option>
+        <option>Procedure complexity / material use</option>
+        <option>Custom clinical/administrative reason</option>
+      </select>
+    </label>
+
+    <label class="full">Optional Rate Note
+      <input id="bRateNote" placeholder="Optional — brief reason; avoid unnecessary sensitive financial details">
+    </label>
+
+    <div class="full bill-live-total">
+      <span>Billable total</span><b id="bLiveTotal">₹0</b>
+    </div>
+
+    <label>Cash<input id="bCash" type="number" value="0" min="0"></label>
+    <label>UPI<input id="bUpi" type="number" value="0" min="0"></label>
+    <label>Card<input id="bCard" type="number" value="0" min="0"></label>
+    <label>Bank<input id="bBank" type="number" value="0" min="0"></label>
+    <label>Advance Adjusted<input id="bAdvance" type="number" value="0" min="0"></label>
+    <label>Service / Procedure By<input id="bBy" placeholder="Dr / Staff"></label>
+    <label>Payment Received By<input id="bPayBy" placeholder="Staff"></label>
+    <label class="full">Notes<textarea id="bNotes"></textarea></label>
+    <div class="full"><button class="primary" id="saveBillBtn">Save Bill</button></div>
+  </div>`,
+  'Choose any rate within the approved minimum–maximum range. ₹0 is available only where Free / Seva is configured. Pathology and Medicine use custom amount entry.');
+
+  const getService=()=>BILLING_CATALOG.find(x=>x.id===$('#bService').value);
+
+  const nearestMid=(s)=>{
+    if(s.max==null) return s.defaultRate||0;
+    if(s.min===s.max) return s.min;
+    return Math.round((s.min+s.max)/2);
+  };
+
+  const renderRateUI=()=>{
+    const s=getService(); if(!s)return;
+    const card=$('#billingRangeCard');
+    const custom=(s.id==='FB-PATH'||s.id==='FB-MED');
+    $('#bCustomNameWrap').classList.toggle('hidden',!custom);
+    $('#bCustomName').placeholder=s.id==='FB-PATH'?'e.g. CBC / LFT / RFT / HbA1c':'Optional medicine / pharmacy note';
+
+    if(s.max==null){
+      card.innerHTML=`<div class="range-head"><div><b>${esc(s.name)}</b><small>Custom amount billing</small></div><span class="range-badge">₹0+</span></div>
+      <div class="rate-guidance">Enter the actual total amount for this bill.</div>`;
+      $('#bRate').min='0'; $('#bRate').removeAttribute('max'); $('#bRate').value=s.defaultRate||0;
+    }else{
+      const mid=nearestMid(s);
+      const presetBtns=[...new Set([s.min,...(s.presets||[]),mid,s.max])].sort((a,b)=>a-b).map(v=>`<button type="button" class="rate-chip ${v===s.defaultRate?'recommended':''}" data-rate="${v}">${v===0?'₹0 • Seva':money(v)}</button>`).join('');
+      card.innerHTML=`<div class="range-head"><div><b>${esc(s.name)}</b><small>Approved billing range</small></div><span class="range-badge">${s.min===s.max?money(s.min):`${money(s.min)} – ${money(s.max)}`}</span></div>
+      <div class="rate-guidance">Any whole-rupee amount inside this range can be selected. Quick choices are shown below.</div>
+      <div class="rate-chip-row">${presetBtns}</div>
+      ${s.note?`<div class="rate-note">${esc(s.note)}</div>`:''}`;
+      $('#bRate').min=String(s.min); $('#bRate').max=String(s.max); $('#bRate').value=s.defaultRate??mid;
+      card.querySelectorAll('[data-rate]').forEach(btn=>btn.onclick=()=>{$('#bRate').value=btn.dataset.rate;validateRate(false);updateBillTotal()});
+    }
+    updateBillTotal();
+  };
+
+  const validateRate=(showAlert=true)=>{
+    const s=getService(); if(!s)return true;
+    let r=Number($('#bRate').value||0);
+    if(s.max==null){
+      if(r<0){$('#bRate').value=0;if(showAlert)alert('Amount cannot be negative.');return false}
+      return true;
+    }
+    if(r<s.min||r>s.max){
+      const fixed=Math.min(s.max,Math.max(s.min,r));
+      $('#bRate').value=fixed;
+      if(showAlert)alert(`Rate must remain between ${money(s.min)} and ${money(s.max)} for this service.`);
+      return false;
     }
     return true;
-  });
-  const billed=list.reduce((s,p)=>s+(Number(p.amount)||0),0);
-  const collected=list.reduce((s,p)=>s+(Number(p.paid)||0),0);
-  const due=list.reduce((s,p)=>s+paymentBalance(p),0);
-  const dueChildren=new Set(list.filter(p=>paymentBalance(p)>0).map(p=>p.childId)).size;
-  const cash=list.filter(p=>p.method==='Cash').reduce((s,p)=>s+(Number(p.paid)||0),0);
-  const upi=list.filter(p=>p.method==='UPI').reduce((s,p)=>s+(Number(p.paid)||0),0);
-  const card=list.filter(p=>p.method==='Card').reduce((s,p)=>s+(Number(p.paid)||0),0);
-  const bank=list.filter(p=>p.method==='Bank Transfer').reduce((s,p)=>s+(Number(p.paid)||0),0);
-  const credit=list.filter(p=>['Credit / Udhari','Pay Later'].includes(paymentStatus(p))).reduce((s,p)=>s+paymentBalance(p),0);
-  const pending=list.filter(p=>['Pending','Part Paid'].includes(paymentStatus(p))).reduce((s,p)=>s+paymentBalance(p),0);
-  const prepaid=list.filter(p=>paymentStatus(p)==='Home Use - Already Paid').reduce((s,p)=>s+(Number(p.paid)||0),0);
-  return {billed,collected,due,dueChildren,cash,upi,card,bank,credit,pending,prepaid,count:list.length};
-}
-function renderPaymentKpis(){
-  const el=$('#paymentKpis');if(!el)return;
-  const m=paymentSummary('month'),all=paymentSummary('all'),exp=expectedDoseBilling('month');
-  const staffMonth=staffFinanceSummary('month');
-  const administeredThisMonth=Object.values(staffMonth).reduce((s,x)=>s+(Number(x.administered)||0),0);
-  const rate=currentSwarnaprashanRate();
-  el.innerHTML=`
-    <div class="billing-rate-banner">
-      <div><span>Current Swarnaprashan Rate</span><b>${money(rate)} / dose</b></div>
-      <button class="ghost" onclick="app.showView('settings')">Change Rate</button>
-    </div>
-    <div class="finance-grid">
-      ${[
-        ['Swarnaprashan This Month',administeredThisMonth,'blue','Attributed administered doses'],
-        ['Expected Billing This Month',money(exp.expected),'gold',`${exp.count} recorded dose${exp.count===1?'':'s'}`],
-        ['Collected This Month',money(m.collected),'green','All received payments'],
-        ['Cash Collection',money(m.cash),'gold','This month'],
-        ['UPI Collection',money(m.upi),'blue','This month'],
-        ['Card / Bank',money(m.card+m.bank),'violet','This month'],
-        ['Pending Balance',money(m.pending),'orange','Pending + part-paid'],
-        ['Credit / Udhari',money(m.credit),'red','Outstanding credit'],
-        ['Total Outstanding',money(all.due),'red',`${all.dueChildren} children with due`],
-        ['Home-use Prepaid',money(m.prepaid),'teal','Already paid home-use'],
-        ['Payment Entries',all.count,'neutral','All-time ledger entries']
-      ].map(x=>`<div class="finance-kpi ${x[2]}"><span>${x[0]}</span><b>${x[1]}</b><small>${x[3]}</small></div>`).join('')}
-    </div>`;
-}
-
-function dayActivitySummary(date){
-  const cases=(db.cases||[]).filter(x=>String(x.date||'')===date);
-  const payments=(db.payments||[]).filter(x=>String(x.date||'')===date);
-  const administered=cases.filter(x=>{
-    const type=String(x.type||'').toLowerCase();
-    const dose=String(x.dose||x.swarnaprashanDose||'').trim();
-    return type.includes('swarnaprashan') || !!dose;
-  });
-  const childIds=new Set(administered.map(x=>x.childId).filter(Boolean));
-  const paid=payments.filter(x=>['Paid','Home Use - Already Paid'].includes(paymentStatus(x))).length;
-  const due=payments.filter(x=>paymentBalance(x)>0).length;
-  const totalCollected=payments.reduce((s,p)=>s+(Number(p.paid)||0),0);
-  return {cases:cases.length,administered:administered.length,children:childIds.size,payments:payments.length,paid,due,totalCollected};
-}
-function renderTwoDayActivity(){
-  const box=$('#twoDayActivity');if(!box)return;
-  const d1=db.dashboardDates?.day1||'2026-08-11', d2=db.dashboardDates?.day2||'2026-08-12';
-  if($('#spDay1'))$('#spDay1').value=d1;
-  if($('#spDay2'))$('#spDay2').value=d2;
-  const card=(label,date)=>{
-    const s=dayActivitySummary(date);
-    return `<div class="day-activity-card">
-      <div class="day-activity-head"><span>${label}</span><b>${fmt(date)}</b></div>
-      <div class="day-activity-kpis">
-        <div><b>${s.children}</b><span>Children dosed</span></div>
-        <div><b>${s.cases}</b><span>Clinical entries</span></div>
-        <div><b>${s.payments}</b><span>Payment entries</span></div>
-        <div><b>${money(s.totalCollected)}</b><span>Collected</span></div>
-      </div>
-      <div class="day-activity-foot"><span>${s.paid} paid</span><span>${s.due} with due</span></div>
-      <button class="ghost" onclick="app.openDayChildren('${date}')">Open date-wise records</button>
-    </div>`;
-  };
-  box.innerHTML=card('DAY 1',d1)+card('DAY 2',d2);
-}
-function openDayChildren(date){
-  showView('children');
-  setTimeout(()=>{
-    if($('#childSearch'))$('#childSearch').value='';
-    childAlpha='';
-    const ids=new Set(
-      [...(db.cases||[]).filter(x=>String(x.date||'')===date),...(db.payments||[]).filter(x=>String(x.date||'')===date)]
-        .map(x=>x.childId).filter(Boolean)
-    );
-    drawChildrenByIds(ids,date);
-  },100);
-}
-async function drawChildrenByIds(ids,date=''){
-  const statusFilter=$('#childStatusFilter')?.value||'';
-  const taskFilter=$('#childTaskFilter')?.value||'';
-  const paymentFilter=$('#childPaymentFilter')?.value||'';
-  const staffFilter=$('#childStaffFilter')?.value||'';
-  const arr=normalizedChildren()
-    .filter(c=>ids.has(c.id))
-    .filter(c=>!statusFilter||c.currentStatus===statusFilter)
-    .filter(c=>!taskFilter||c.taskStatus===taskFilter)
-    .filter(c=>!paymentFilter||paymentStatus(latestPayment(c.id))===paymentFilter)
-    .filter(c=>{if(!staffFilter)return true;const a=childAudit(c);return [a.registeredBy,a.administeredBy,a.paymentBy].includes(staffFilter)})
-    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),undefined,{sensitivity:'base'}));
-  const oldQ=$('#childSearch')?.value||'';
-  if($('#childrenList'))$('#childrenList').innerHTML=`<div class="registry-summary"><b>${arr.length}</b> child record(s) on ${fmt(date)}. Click Open/Edit from the normal registry below.</div>`;
-  // Reuse normal registry while restricting by exact child names only if any.
-  if(!arr.length){ if($('#childrenList'))$('#childrenList').innerHTML+=`<p class="muted">No saved child-linked activity on this date.</p>`; return; }
-  const names=arr.map(x=>x.name).filter(Boolean);
-  // show compact date-specific list with direct actions, without changing saved data
-  $('#childrenList').innerHTML+=`<div class="date-child-list">${arr.map(c=>`<div class="date-child-row"><div><b>${esc(c.name)}</b><span>${esc(c.regId||'-')} • ${age(c.dob)}</span></div><div><button onclick="app.openChildDetails('${c.id}')">Open</button><button class="ghost" onclick="app.editChild('${c.id}')">Edit</button><button class="ghost" onclick="app.startClinical('${c.id}')">Clinical</button><button class="ghost" onclick="app.recordPayment('${c.id}')">₹ Payment</button></div></div>`).join('')}</div>`;
-}
-
-
-
-const CLINIC_PANCHANG_EVENTS = [
-  {date:'2026-08-12',type:'amavasya',title:'Shravana Amavasya',tithi:'Shravana Krishna Amavasya',note:'Panchang marker'},
-  {date:'2026-08-15',type:'festival',title:'Independence Day',tithi:'National holiday',note:'Clinic timing may differ'},
-  {date:'2026-08-28',type:'purnima',title:'Shravana Purnima • Raksha Bandhan',tithi:'Shravana Shukla Purnima',note:'Major festival'},
-  {date:'2026-09-04',type:'festival',title:'Krishna Janmashtami',tithi:'Bhadrapada Krishna Ashtami',note:'Major festival'},
-  {date:'2026-09-08',type:'swarna',title:'Swarnaprashan / Pushya',tithi:'Krishna Dwadashi → Trayodashi',note:'Planned Swarnaprashan date'},
-  {date:'2026-09-10',type:'amavasya',title:'Bhadrapada Amavasya',tithi:'Bhadrapada Krishna Amavasya',note:'Panchang marker'},
-  {date:'2026-09-14',type:'festival',title:'Ganesh Chaturthi',tithi:'Bhadrapada Shukla Chaturthi',note:'Major festival'},
-  {date:'2026-09-26',type:'purnima',title:'Bhadrapada Purnima',tithi:'Bhadrapada Shukla Purnima',note:'Panchang marker'},
-  {date:'2026-10-02',type:'festival',title:'Gandhi Jayanti',tithi:'National holiday',note:'Clinic timing may differ'},
-  {date:'2026-10-05',type:'swarna',title:'Swarnaprashan / Pushya',tithi:'Krishna Dashami',note:'Planned Swarnaprashan date'},
-  {date:'2026-10-10',type:'amavasya',title:'Ashwina Amavasya',tithi:'Ashwina Krishna Amavasya',note:'Panchang marker'},
-  {date:'2026-10-20',type:'festival',title:'Dussehra',tithi:'Ashwina Shukla Dashami',note:'Major festival'},
-  {date:'2026-10-26',type:'purnima',title:'Ashwina Purnima',tithi:'Ashwina Shukla Purnima',note:'Panchang marker'},
-  {date:'2026-11-01',type:'swarna',title:'Swarnaprashan / Pushya',tithi:'Krishna Saptami → Ashtami',note:'Planned Swarnaprashan date'},
-  {date:'2026-11-08',type:'amavasya',title:'Diwali • Kartika Amavasya',tithi:'Kartika Krishna Amavasya',note:'Major festival / holiday'},
-  {date:'2026-11-24',type:'purnima',title:'Kartika Purnima • Guru Nanak Jayanti',tithi:'Kartika Shukla Purnima',note:'Major festival'},
-  {date:'2026-11-28',type:'swarna',title:'Swarnaprashan / Pushya',tithi:'Krishna Panchami',note:'Planned Swarnaprashan date'},
-  {date:'2026-12-08',type:'amavasya',title:'Margashirsha Amavasya',tithi:'Margashirsha Krishna Amavasya',note:'Panchang marker'},
-  {date:'2026-12-23',type:'purnima',title:'Margashirsha Purnima',tithi:'Margashirsha Shukla Purnima',note:'Panchang marker'},
-  {date:'2026-12-25',type:'festival',title:'Christmas',tithi:'Public holiday marker',note:'Clinic timing may differ'},
-  {date:'2026-12-26',type:'swarna',title:'Swarnaprashan / Pushya',tithi:'Krishna Tritiya',note:'Planned Swarnaprashan date'},
-  {date:'2027-01-07',type:'amavasya',title:'Pausha Amavasya',tithi:'Pausha Krishna Amavasya',note:'Panchang marker'},
-  {date:'2027-01-15',type:'festival',title:'Makara Sankranti',tithi:'Solar festival',note:'Major festival'},
-  {date:'2027-01-22',type:'swarna',title:'Swarnaprashan / Pushya • Pausha Purnima',tithi:'Pausha Shukla Purnima',note:'Pushya + Purnima clinic-planning marker'},
-  {date:'2027-01-26',type:'festival',title:'Republic Day',tithi:'National holiday',note:'Clinic timing may differ'},
-  {date:'2027-02-06',type:'amavasya',title:'Magha Amavasya • Mauni Amavasya',tithi:'Magha Krishna Amavasya',note:'Major Panchang day'},
-  {date:'2027-02-11',type:'festival',title:'Vasant Panchami',tithi:'Magha Shukla Panchami',note:'Festival'},
-  {date:'2027-02-19',type:'swarna',title:'Swarnaprashan / Pushya',tithi:'Shukla Trayodashi → Chaturdashi',note:'Planned Swarnaprashan date'},
-  {date:'2027-02-20',type:'purnima',title:'Magha Purnima',tithi:'Magha Shukla Purnima',note:'Panchang marker'},
-  {date:'2027-03-08',type:'amavasya',title:'Phalguna Amavasya',tithi:'Phalguna Krishna Amavasya',note:'Panchang marker'},
-  {date:'2027-03-18',type:'swarna',title:'Swarnaprashan / Pushya',tithi:'Shukla Ekadashi',note:'Planned Swarnaprashan date'},
-  {date:'2027-03-22',type:'purnima',title:'Phalguna Purnima',tithi:'Phalguna Shukla Purnima',note:'Panchang marker'},
-  {date:'2027-04-06',type:'amavasya',title:'Chaitra Amavasya',tithi:'Chaitra Krishna Amavasya',note:'Panchang marker'},
-  {date:'2027-04-14',type:'swarna',title:'Swarnaprashan / Pushya',tithi:'Shukla Ashtami → Navami',note:'Planned Swarnaprashan date'},
-  {date:'2027-04-20',type:'purnima',title:'Chaitra Purnima',tithi:'Chaitra Shukla Purnima',note:'Panchang marker'},
-  {date:'2027-05-06',type:'amavasya',title:'Vaishakha Amavasya',tithi:'Vaishakha Krishna Amavasya',note:'Panchang marker'},
-  {date:'2027-05-12',type:'swarna',title:'Swarnaprashan / Pushya',tithi:'Shukla Saptami',note:'Planned Swarnaprashan date'},
-  {date:'2027-05-20',type:'purnima',title:'Vaishakha Purnima • Buddha Purnima',tithi:'Vaishakha Shukla Purnima',note:'Major festival'},
-  {date:'2027-06-04',type:'amavasya',title:'Jyeshtha Amavasya',tithi:'Jyeshtha Krishna Amavasya',note:'Panchang marker'},
-  {date:'2027-06-08',type:'swarna',title:'Swarnaprashan / Pushya',tithi:'Shukla Chaturthi → Panchami',note:'Planned Swarnaprashan date'},
-  {date:'2027-06-18',type:'purnima',title:'Jyeshtha Purnima • Kabirdas Jayanti',tithi:'Jyeshtha Shukla Purnima',note:'Panchang marker'},
-  {date:'2027-07-03',type:'amavasya',title:'Ashadha Amavasya',tithi:'Ashadha Krishna Amavasya',note:'Panchang marker'},
-  {date:'2027-07-05',type:'swarna',title:'Swarnaprashan / Pushya • Jagannath Rathyatra',tithi:'Ashadha Shukla Dwitiya',note:'Pushya planning + festival'},
-  {date:'2027-07-18',type:'purnima',title:'Guru Purnima',tithi:'Ashadha Shukla Purnima',note:'Major festival'},
-  {date:'2027-08-02',type:'swarna',title:'Swarnaprashan / Pushya • Shravana Amavasya',tithi:'Amavasya → Shukla Pratipada',note:'Verify exact clinic Pushya window'},
-  {date:'2027-08-15',type:'festival',title:'Independence Day',tithi:'National holiday',note:'Clinic timing may differ'},
-  {date:'2027-08-16',type:'purnima',title:'Shravana Purnima Vrat',tithi:'Shravana Shukla Purnima',note:'Panchang marker'}
-];
-
-let miniPanchangCursor = new Date(2026,7,1);
-function clinicEventsForDate(iso){return CLINIC_PANCHANG_EVENTS.filter(x=>x.date===iso);}
-function renderMiniPanchang(){
-  const grid=$('#miniPanchangGrid'), title=$('#miniPanchangTitle'); if(!grid||!title)return;
-  const y=miniPanchangCursor.getFullYear(),m=miniPanchangCursor.getMonth();
-  const monthName=new Intl.DateTimeFormat('en-IN',{month:'long',year:'numeric'}).format(new Date(y,m,1));
-  title.textContent=monthName+' • Swarnaprashan Panchang';
-  const firstDay=new Date(y,m,1).getDay(), days=new Date(y,m+1,0).getDate(), todayIso=new Date().toISOString().slice(0,10);
-  const cells=[];
-  for(let i=0;i<firstDay;i++)cells.push('<div class="mini-day empty" aria-hidden="true"></div>');
-  for(let d=1;d<=days;d++){
-    const date=new Date(y,m,d), iso=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const evs=clinicEventsForDate(iso),isSun=date.getDay()===0,isToday=iso===todayIso,types=[...new Set(evs.map(e=>e.type))],cls=['mini-day'];
-    if(isSun)cls.push('is-sunday'); if(isToday)cls.push('is-today'); types.forEach(t=>cls.push('has-'+t));
-    const labels=evs.slice(0,2).map(e=>`<small class="mini-event-label ${e.type}">${esc(e.title)}</small>`).join('');
-    cells.push(`<button class="${cls.join(' ')}" data-date="${iso}" aria-label="${esc(monthName+' '+d+' '+evs.map(e=>e.title).join(' '))}">
-      <span class="mini-date-num">${d}</span>${labels}${evs.length>2?`<small class="mini-more">+${evs.length-2} more</small>`:''}
-    </button>`);
-  }
-  grid.innerHTML=cells.join('');
-  $$('.mini-day[data-date]').forEach(btn=>btn.onclick=()=>showMiniPanchangDetail(btn.dataset.date));
-}
-function showMiniPanchangDetail(iso){
-  const box=$('#miniPanchangDetail');if(!box)return;const evs=clinicEventsForDate(iso),d=new Date(iso+'T00:00:00');
-  const heading=new Intl.DateTimeFormat('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(d);
-  if(!evs.length){box.innerHTML=`<b>${esc(heading)}</b><span>No special Swarnaprashan/Purnima/Amavasya/festival marker saved for this date.</span>`;return;}
-  box.innerHTML=`<b>${esc(heading)}</b>${evs.map(e=>`<span class="detail-chip ${e.type}"><strong>${esc(e.title)}</strong> • ${esc(e.tithi)}${e.note?` • ${esc(e.note)}`:''}</span>`).join('')}`;
-}
-function bindMiniPanchang(){
-  if($('#miniPanchangPrev'))$('#miniPanchangPrev').onclick=()=>{miniPanchangCursor=new Date(miniPanchangCursor.getFullYear(),miniPanchangCursor.getMonth()-1,1);renderMiniPanchang();};
-  if($('#miniPanchangNext'))$('#miniPanchangNext').onclick=()=>{miniPanchangCursor=new Date(miniPanchangCursor.getFullYear(),miniPanchangCursor.getMonth()+1,1);renderMiniPanchang();};
-  if($('#miniPanchangToday'))$('#miniPanchangToday').onclick=()=>{const n=new Date();miniPanchangCursor=new Date(n.getFullYear(),n.getMonth(),1);renderMiniPanchang();};
-  renderMiniPanchang();
-}
-
-const SWARNAPRASHAN_YEAR_CALENDAR = [
-  {clinicDate:'2026-09-08', weekday:'Tuesday', pushya:'07 Sep 18:14 → 08 Sep 16:39', tithi:'Krishna Dwadashi → Trayodashi'},
-  {clinicDate:'2026-10-05', weekday:'Monday', pushya:'05 Oct 00:13 → 05 Oct 23:09', tithi:'Krishna Dashami'},
-  {clinicDate:'2026-11-01', weekday:'Sunday', pushya:'01 Nov 05:39 → 02 Nov 04:30', tithi:'Krishna Saptami → Ashtami'},
-  {clinicDate:'2026-11-28', weekday:'Saturday', pushya:'28 Nov 12:50 → 29 Nov 10:59', tithi:'Krishna Panchami'},
-  {clinicDate:'2026-12-26', weekday:'Saturday', pushya:'25 Dec 22:50 → 26 Dec 20:12', tithi:'Krishna Tritiya'},
-  {clinicDate:'2027-01-22', weekday:'Friday', pushya:'22 Jan 10:24 → 23 Jan 07:31', tithi:'Purnima → Krishna Pratipada'},
-  {clinicDate:'2027-02-19', weekday:'Friday', pushya:'18 Feb 21:05 → 19 Feb 18:35', tithi:'Shukla Trayodashi → Chaturdashi'},
-  {clinicDate:'2027-03-18', weekday:'Thursday', pushya:'18 Mar 05:07 → 19 Mar 03:21', tithi:'Shukla Ekadashi'},
-  {clinicDate:'2027-04-14', weekday:'Wednesday', pushya:'14 Apr 10:52 → 15 Apr 09:33', tithi:'Shukla Ashtami → Navami'},
-  {clinicDate:'2027-05-12', weekday:'Wednesday', pushya:'11 May 16:25 → 12 May 14:55', tithi:'Shukla Saptami'},
-  {clinicDate:'2027-06-08', weekday:'Tuesday', pushya:'07 Jun 23:45 → 08 Jun 21:36', tithi:'Shukla Chaturthi → Panchami'},
-  {clinicDate:'2027-07-05', weekday:'Monday', pushya:'05 Jul 09:19 → 06 Jul 06:33', tithi:'Shukla Dvitiya'},
-  {clinicDate:'2027-08-02', weekday:'Monday', pushya:'01 Aug 20:04 → 02 Aug 17:09', tithi:'Amavasya → Shukla Pratipada'}
-];
-
-function renderAnnualSpCalendar(){
-  const box=$('#annualSpCalendar'); if(!box) return;
-  const todayIso=new Date().toISOString().slice(0,10);
-  const next=(SWARNAPRASHAN_YEAR_CALENDAR.find(x=>x.clinicDate>=todayIso)||{}).clinicDate||'';
-  box.innerHTML=SWARNAPRASHAN_YEAR_CALENDAR.map(x=>`
-    <article class="annual-sp-item ${x.clinicDate===next?'is-next':''}">
-      <div class="annual-sp-date">
-        <span>${x.clinicDate===next?'NEXT':'PUSHYA'}</span>
-        <b>${fmt(x.clinicDate)}</b>
-        <small>${esc(x.weekday)}</small>
-      </div>
-      <div class="annual-sp-body">
-        <div><span>Pushya window</span><b>${esc(x.pushya)}</b></div>
-        <div><span>Tithi</span><b>${esc(x.tithi)}</b></div>
-      </div>
-      <div class="annual-sp-actions">
-        <button class="ghost" onclick="app.openCalendarDate('${x.clinicDate}')">Use This Date</button>
-      </div>
-    </article>`).join('');
-}
-function openCalendarDate(date){
-  if(db.dashboardDates){
-    db.dashboardDates.day1=date;
-    const d=new Date(date+'T00:00:00');
-    d.setDate(d.getDate()+1);
-    db.dashboardDates.day2=d.toISOString().slice(0,10);
-    save();
-  }
-  showView('dashboard');
-  setTimeout(()=>{
-    renderTwoDayActivity();
-  renderAnnualSpCalendar();
-  bindMiniPanchang();
-  if($('#toggleSpCalendarBtn')) $('#toggleSpCalendarBtn').onclick=()=>{
-    const box=$('#annualSpCalendar'); if(!box)return;
-    box.classList.toggle('compact');
-    $('#toggleSpCalendarBtn').textContent=box.classList.contains('compact')?'Full View':'Compact View';
-  };
-    document.getElementById('twoDayActivity')?.scrollIntoView({behavior:'smooth',block:'center'});
-  },100);
-}
-
-async function renderDashboard(){
-  let docs=[];try{docs=await getDocs()}catch{}
-  const now=new Date(),thisMonth=db.followups.filter(v=>new Date(v.date).getMonth()===now.getMonth()&&new Date(v.date).getFullYear()===now.getFullYear()).length;
-  $('#kpis').innerHTML=[['Registered Children',db.children.length],['Clinical Entries',db.cases.length],['Visits This Month',thisMonth],['Saved Documents',docs.length]].map(x=>`<div class="kpi"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');
-  renderPaymentKpis();
-  renderStaffFinanceDashboard();
-  renderInventoryDashboard();
-  renderTwoDayActivity();
-  if($('#saveSpDaysBtn'))$('#saveSpDaysBtn').onclick=()=>{db.dashboardDates={day1:$('#spDay1').value||'2026-08-11',day2:$('#spDay2').value||'2026-08-12'};save();renderTwoDayActivity();alert('2-day Swarnaprashan dates saved.');};
-  const oc=childOperationalCounts();
-  if($('#opsKpis')) $('#opsKpis').innerHTML=[
-    ['Active',oc.active,'green'],['Ready',oc.ready,'gold'],['Appointments Today',oc.apptToday,'blue'],['Dose Taken Today',oc.doseToday,'green'],
-    ['Reminders Today',oc.remindersToday,'orange'],['Home Use',oc.home,'violet'],['Health Hold',oc.hold,'red'],['Stopped',oc.stopped,'gray']
-  ].map(x=>`<button class="ops-kpi ${x[2]}" onclick="app.openChildrenStatus('${x[0]}')"><b>${x[1]}</b><span>${x[0]}</span></button>`).join('');
-
-  const sorted=[...db.children].sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),undefined,{sensitivity:'base'}));
-  $('#recentChildren').innerHTML=sorted.slice(0,8).map(c=>`<div class="docitem child-dashboard-row" onclick="app.openChildFromDashboard('${c.id}')"><b>${esc(c.name)}</b><div class="docmeta"><span class="id-badge">${esc(c.regId||'-')}</span> • ${age(c.dob)} • ${esc(c.mobile||'')}</div></div>`).join('')||'<p class="muted">No child registered.</p>';
-  $('#dueChildren').innerHTML=sorted.slice(0,8).map(c=>{const f=fups(c.id).at(-1);return`<div class="docitem"><b>${esc(c.name)}</b><div class="docmeta">${esc(c.regId||'-')} • Last follow-up: ${f?fmt(f.date):'Not recorded'}</div></div>`}).join('')||'<p class="muted">Register a child to begin.</p>';
-
-  const today=new Date(); today.setHours(0,0,0,0);
-  const upcoming=PUSHYA_DATES.filter(x=>new Date(x.date+'T00:00:00')>=today);
-  const next=upcoming[0]||PUSHYA_DATES[0];
-  if($('#pushyaNext')) $('#pushyaNext').innerHTML=next?`<div class="next-pushya"><span>Next Pushya</span><b>${esc(next.label)}</b><small>Reference date • verify local Raipur Panchang timing</small></div>`:'<p class="muted">Update Pushya calendar.</p>';
-  if($('#pushyaYear')) $('#pushyaYear').innerHTML=upcoming.slice(0,13).map((x,i)=>`<span class="pushya-chip ${i===0?'next':''}">${esc(x.label.split(' • ')[0])}</span>`).join('');
-
-  options($('#dashChild'));$('#dashChild').onchange=()=>drawSnapshot($('#dashChild').value);$('#dashSnapshot').innerHTML='<p class="muted">Select a child for baseline-to-latest analysis.</p>';
-  $('#dashDocs').innerHTML=docs.slice(-5).reverse().map(d=>`<div class="docitem"><b>${esc(d.name)}</b><div class="docmeta">${esc(d.type)} • ${fmt(d.date)}</div></div>`).join('')||'<p class="muted">No documents uploaded.</p>';
-}
-function openChildFromDashboard(id){showView('children');setTimeout(()=>openChildDetails(id),80)}
-function openAlpha(letter){showView('children');setTimeout(()=>{childAlpha=letter==='ALL'?'':letter;drawChildren($('#childSearch')?.value||'')},80)}
-function drawSnapshot(id){const fs=fups(id);if(fs.length<2){$('#dashSnapshot').innerHTML='<p class="muted">At least 2 follow-ups required.</p>';return}const a=fs[0],b=fs.at(-1);$('#dashSnapshot').innerHTML=`<div class="metricrow">${['Learning','Memory','Playing','School Performance'].map(k=>`<div class="metric"><span>${k}</span><b>${scoreLabel(b.scores?.[k])}</b>${trend(a.scores?.[k],b.scores?.[k])}</div>`).join('')}</div>`}
-
-
-// Direct in-browser camera capture using getUserMedia
-let cameraStream=null, cameraFacing='environment', cameraTargetCallback=null;
-async function startDirectCamera(title='Take Photo', onCaptured=null){
-  cameraTargetCallback=onCaptured;
-  const modal=$('#cameraModal'),video=$('#cameraVideo'),msg=$('#cameraMessage');
-  $('#cameraModalTitle').textContent=title;
-  modal.classList.add('open');modal.setAttribute('aria-hidden','false');
-  msg.textContent='Starting camera…';msg.style.display='grid';
-  try{
-    if(cameraStream)cameraStream.getTracks().forEach(t=>t.stop());
-    cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:cameraFacing}},audio:false});
-    video.srcObject=cameraStream;
-    await video.play();
-    msg.style.display='none';
-  }catch(err){
-    msg.innerHTML='Camera access is unavailable or blocked.<br><small>Please allow camera permission in the browser, or use Gallery/File.</small>';
-  }
-}
-function stopDirectCamera(){
-  if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null}
-  const modal=$('#cameraModal');if(modal){modal.classList.remove('open');modal.setAttribute('aria-hidden','true')}
-}
-async function switchDirectCamera(){
-  cameraFacing=cameraFacing==='environment'?'user':'environment';
-  await startDirectCamera($('#cameraModalTitle')?.textContent||'Take Photo',cameraTargetCallback);
-}
-async function captureDirectCamera(){
-  const video=$('#cameraVideo'),canvas=$('#cameraCanvas');
-  if(!video?.videoWidth){alert('Camera is not ready yet.');return}
-  const maxW=1280,scale=Math.min(1,maxW/video.videoWidth);
-  canvas.width=Math.round(video.videoWidth*scale);canvas.height=Math.round(video.videoHeight*scale);
-  canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
-  const blob=await new Promise(res=>canvas.toBlob(res,'image/jpeg',0.9));
-  if(!blob)return;
-  const file=new File([blob],`camera_${new Date().toISOString().replace(/[:.]/g,'-')}.jpg`,{type:'image/jpeg'});
-  const cb=cameraTargetCallback;stopDirectCamera();
-  if(cb)await cb(file);
-}
-function bindCameraModal(){
-  $('#cameraCloseBtn').onclick=stopDirectCamera;
-  $('#cameraCancelBtn').onclick=stopDirectCamera;
-  $('#cameraSwitchBtn').onclick=switchDirectCamera;
-  $('#cameraCaptureBtn').onclick=captureDirectCamera;
-}
-// Guided clinical workflow
-const STEPS=['Profile','Examination','Investigations','Treatment','Prescription','Review & Share'];
-let wiz={step:0,caseId:null,data:{}};let wizardCameraFile=null;
-function startClinical(childId=''){showView('clinical');wiz={step:0,caseId:null,data:{childId,date:new Date().toISOString().slice(0,10)}};renderWizard()}
-function renderClinical(){if(!wiz.data||!Object.keys(wiz.data).length)wiz={step:0,caseId:null,data:{date:new Date().toISOString().slice(0,10)}};renderWizard()}
-function renderWizard(){
- $('#wizardSteps').innerHTML=STEPS.map((s,i)=>`<div class="step ${i===wiz.step?'active':i<wiz.step?'done':''}">${i+1}. ${s}</div>`).join('');
- $('#prevStepBtn').disabled=wiz.step===0;$('#prevStepBtn').onclick=()=>{collectWizard();wiz.step=Math.max(0,wiz.step-1);renderWizard()};
- $('#saveDraftBtn').onclick=saveDraft;$('#saveNextBtn').textContent=wiz.step===5?'Save & Finish':'Save & Next →';
- $('#saveNextBtn').onclick=async()=>{await collectWizard();saveDraft();if(wiz.step<5){wiz.step++;renderWizard()}else{alert('Clinical entry saved');showView('reports')}};
- $('#wizardBody').innerHTML=wizardHtml(wiz.step);bindWizard();
-}
-function scaleOptions(v=2){return[0,1,2,3,4].map(n=>`<option value="${n}" ${Number(v)===n?'selected':''}>${n} - ${scoreLabel(n)}</option>`).join('')}
-
-// Classical Ayurveda examination choices. Numeric 0–4 grading is reserved for longitudinal functional outcomes only.
-const ASHTAVIDHA_OPTIONS={
-  Nadi:['Not assessed','Vataja','Pittaja','Kaphaja','Vata-Pittaja','Vata-Kaphaja','Pitta-Kaphaja','Tridoshaja / Sannipataja','Sama / Prakrita'],
-  Mala:['Not assessed','Samanya','Vibandha / Baddha','Mridu','Drava / Atisara','Picchila','Ama-yukta','Rakta-yukta','Krimi-yukta','Durgandhita','Other'],
-  Mutra:['Not assessed','Samanya','Alpamutrata','Bahumutrata','Peeta','Shweta','Rakta-varna','Avila / Turbid','Daha-yukta','Krichchhra','Other'],
-  Jihva:['Not assessed','Nirama / Shuddha','Sama / Coated','Shweta-lepa','Peeta-lepa','Ruksha','Snigdha','Rakta','Vivarna','Other'],
-  Shabda:['Not assessed','Samanya','Manda','Karkasha','Bhinna / Hoarse','Uchcha','Aspashta','Other'],
-  Sparsha:['Not assessed','Samanya','Sheeta','Ushna','Ruksha','Snigdha','Mridu','Kathina','Khara','Other'],
-  Drik:['Not assessed','Samanya / Prasanna','Shweta','Peeta','Rakta','Ruksha / Shushka','Malina','Other'],
-  Akruti:['Not assessed','Samanya','Krisha','Madhyama','Sthula','Hrasva','Dirgha','Other']
-};
-
-const DASHAVIDHA_OPTIONS={
-  Prakriti:['Not assessed','Vataja','Pittaja','Kaphaja','Vata-Pittaja','Vata-Kaphaja','Pitta-Kaphaja','Sama / Tridoshaja'],
-  Vikriti:['Not assessed','No evident dosha vikriti','Vataja','Pittaja','Kaphaja','Vata-Pittaja','Vata-Kaphaja','Pitta-Kaphaja','Tridoshaja / Sannipataja'],
-  Sara:['Not assessed','Tvak Sara','Rakta Sara','Mamsa Sara','Meda Sara','Asthi Sara','Majja Sara','Shukra Sara','Satva Sara','Mixed / Multiple Sara'],
-  Samhanana:['Not assessed','Pravara','Madhyama','Avara'],
-  Pramana:['Not assessed','Sama / Pramana-sampat','Adhika','Hina','Measured separately'],
-  Satmya:['Not assessed','Sarvarasa Satmya / Pravara','Madhyama Satmya','Avara / Ekarasa Satmya'],
-  Satva:['Not assessed','Pravara','Madhyama','Avara'],
-  'Ahara Shakti — Abhyavaharana':['Not assessed','Pravara','Madhyama','Avara'],
-  'Ahara Shakti — Jarana':['Not assessed','Pravara','Madhyama','Avara'],
-  'Vyayama Shakti':['Not assessed','Pravara','Madhyama','Avara'],
-  Vaya:['Not assessed','Bala','Madhyama','Jirna / Vriddha']
-};
-
-
-const PUSHYA_DATES=[
-  {date:'2026-08-11',label:'11 Aug 2026 • Tuesday'},
-  {date:'2026-09-07',label:'07 Sep 2026 • Monday'},
-  {date:'2026-10-05',label:'05 Oct 2026 • Monday'},
-  {date:'2026-11-01',label:'01 Nov 2026 • Sunday'},
-  {date:'2026-11-28',label:'28 Nov 2026 • Saturday'},
-  {date:'2026-12-25',label:'25 Dec 2026 • Friday'},
-  {date:'2027-01-22',label:'22 Jan 2027 • Friday'},
-  {date:'2027-02-18',label:'18 Feb 2027 • Thursday'},
-  {date:'2027-03-18',label:'18 Mar 2027 • Thursday'},
-  {date:'2027-04-14',label:'14 Apr 2027 • Wednesday'},
-  {date:'2027-05-11',label:'11 May 2027 • Tuesday'},
-  {date:'2027-06-07',label:'07 Jun 2027 • Monday'},
-  {date:'2027-07-05',label:'05 Jul 2027 • Monday'},
-  {date:'2027-08-01',label:'01 Aug 2027 • Sunday'},
-  {date:'2027-08-29',label:'29 Aug 2027 • Sunday'}
-];
-
-const SWARNA_GUIDE={
-en:{
- title:'Swarnaprashan — Parent Information Guide',
- intro:'Swarnaprashan (Suvarna Prashana) is a traditional Ayurvedic pediatric practice described in the context of Lehana/Jatakarma. Classical descriptions use processed gold (Swarna/Swarna Bhasma) with suitable vehicles such as ghrita and madhu; contemporary formulations vary and may also contain Medhya/Rasayana herbs. The exact formulation and dose should therefore be documented product-wise and prescribed by a qualified Ayurvedic physician.',
- sections:[
-  ['What is Swarnaprashan?','A physician-supervised Ayurvedic child-health practice intended as supportive preventive care. It should not be presented as a replacement for vaccination, balanced nutrition, breastfeeding/complementary feeding, hygiene, sleep, developmental surveillance or indicated pediatric treatment.'],
-  ['Ingredients','Commonly described core ingredients include properly prepared/standardized Swarna Bhasma, Ghrita and Madhu. Some contemporary formulations add Brahmi, Shankhapushpi, Guduchi, Yashtimadhu, Vacha, Ashwagandha or other herbs. Record the exact clinic formulation, manufacturer/batch, quality documentation and dose in every visit.'],
-  ['Dose','There is no single universal dose that should be copied across all products or ages. Dose depends on the formulation, concentration, age/weight and physician assessment. One published randomized infant trial used a specific study formulation and age-based drops for 28 days; that study dose should not be generalized to every commercial or clinic preparation.'],
-  ['Timing & Pushya Nakshatra','Many contemporary Swarnaprashan programmes schedule administration on Pushya Nakshatra, traditionally associated with nourishment. Pushya recurs roughly every 27 days. The dashboard provides the upcoming reference dates; exact Raipur start/end timings should be verified from a local Panchang before announcing clinic hours.'],
-  ['Pathya / Practical advice','Keep the child’s regular age-appropriate nutritious diet, adequate hydration, sleep, play and hygiene. Follow the prescribing physician’s product-specific fasting/food-gap instructions. Avoid unnecessary self-medication and do not delay evaluation of fever, dehydration, breathing difficulty, persistent vomiting/diarrhoea, poor feeding, lethargy, seizures or other red flags.'],
-  ['Important safety note for infants','Modern pediatric guidance advises that honey should not be given to children younger than 12 months because of infant botulism risk. If a Swarnaprashan preparation contains honey, the physician must explicitly reconcile the classical formulation with current infant-safety guidance and use an age-appropriate alternative protocol where required.'],
-  ['Quality & metal safety','Use only appropriately manufactured, quality-tested preparations from a reliable regulated source. Products containing metals require particular attention to identity, processing, batch documentation and contamination testing.'],
-  ['What does modern evidence say?','A randomized controlled infant study of a specific Swarna Bhasma + Ghrita + honey formulation reported tolerability and exploratory immunological findings, but between-group IgG differences were not statistically significant and larger, standardized studies are still needed. Claims of guaranteed immunity, IQ enhancement or prevention/cure of specific diseases should therefore be avoided.'],
-  ['Growth & development tracking','Serial height/length, weight and BMI should be interpreted using age- and sex-specific pediatric growth standards. For children 0–5 years, WHO Child Growth Standards are appropriate; for 5–19 years, WHO Growth Reference 2007 applies. The trend over time is more clinically useful than a single isolated number.']
- ]
-},
-hi:{
- title:'स्वर्णप्राशन — अभिभावक जानकारी',
- intro:'स्वर्णप्राशन आयुर्वेद में बाल-स्वास्थ्य से संबंधित एक पारंपरिक अभ्यास है, जिसका वर्णन लेहन/जातकर्म के संदर्भ में मिलता है। शास्त्रीय वर्णनों में सुवर्ण/स्वर्ण भस्म को घृत तथा मधु जैसे अनुपान के साथ दिया जाता है; आधुनिक formulations अलग-अलग हो सकती हैं और उनमें मेध्य/रसायन द्रव्य भी जोड़े जा सकते हैं। इसलिए formulation और dose को उत्पाद व बच्चे के अनुसार योग्य आयुर्वेद चिकित्सक द्वारा तय व दर्ज किया जाना चाहिए।',
- sections:[
-  ['स्वर्णप्राशन क्या है?','यह चिकित्सकीय देखरेख में किया जाने वाला आयुर्वेदिक बाल-स्वास्थ्य कार्यक्रम है। इसे vaccination, संतुलित आहार, breastfeeding/complementary feeding, hygiene, sleep, developmental surveillance या आवश्यक pediatric treatment का विकल्प नहीं बताना चाहिए।'],
-  ['मुख्य ingredients','सामान्यतः उचित रूप से तैयार/standardized स्वर्ण भस्म, घृत और मधु का उल्लेख मिलता है। कुछ आधुनिक formulations में ब्राह्मी, शंखपुष्पी, गुडूची, यष्टिमधु, वचा, अश्वगंधा आदि जोड़े जाते हैं। हर visit में exact formulation, manufacturer/batch, quality details और dose दर्ज करें।'],
-  ['Dose / मात्रा','सभी products और सभी आयु के लिए एक ही universal dose सही नहीं है। Dose formulation concentration, age/weight और physician assessment पर निर्भर होनी चाहिए। किसी research trial की dose को हर clinic/product पर सीधे लागू नहीं करना चाहिए।'],
-  ['समय एवं पुष्य नक्षत्र','कई वर्तमान Swarnaprashan programmes पुष्य नक्षत्र के दिन administration करते हैं। पुष्य लगभग प्रत्येक 27 दिन में आता है। Dashboard में आने वाली reference dates दी गई हैं; clinic timing प्रकाशित करने से पहले Raipur के local Panchang से exact start/end time verify करें।'],
-  ['पथ्य / practical advice','बच्चे का आयु-अनुसार पौष्टिक आहार, पर्याप्त hydration, नींद, खेल और hygiene नियमित रखें। Product-specific food-gap/fasting instructions केवल prescribing physician के अनुसार रखें। तेज बुखार, dehydration, breathing difficulty, लगातार vomiting/diarrhoea, poor feeding, अत्यधिक सुस्ती, seizure आदि में medical evaluation delay न करें।'],
-  ['12 माह से कम शिशु के लिए महत्वपूर्ण safety note','आधुनिक pediatric guidance के अनुसार 12 माह से कम आयु के शिशु को honey नहीं देना चाहिए क्योंकि infant botulism का जोखिम होता है। यदि formulation में मधु है तो physician को classical formulation और वर्तमान infant-safety guidance का स्पष्ट समन्वय करना चाहिए तथा आवश्यकतानुसार age-appropriate alternative protocol चुनना चाहिए।'],
-  ['Quality एवं metal safety','केवल विश्वसनीय regulated source से properly manufactured और quality-tested preparation का उपयोग करें। Metal-containing products में identity, processing, batch documentation और contamination testing पर विशेष ध्यान रखें।'],
-  ['आधुनिक evidence क्या कहता है?','एक randomized infant study में specific Swarna Bhasma + Ghrita + honey formulation की tolerability और exploratory immunological findings देखी गईं; लेकिन between-group IgG difference statistically significant नहीं था और बड़े standardized studies अभी भी आवश्यक हैं। इसलिए guaranteed immunity, IQ increase या specific diseases की prevention/cure जैसे अतिशयोक्त claims से बचें।'],
-  ['Growth और development tracking','Height/length, weight और BMI को age- तथा sex-specific pediatric growth standards के अनुसार serially interpret करना चाहिए। 0–5 वर्ष में WHO Child Growth Standards तथा 5–19 वर्ष में WHO Growth Reference 2007 उपयोगी हैं। एक single value से अधिक महत्वपूर्ण उसका longitudinal trend है।']
- ]
-}
-};
-
-function ayurOptions(options,value){
-  const current=(typeof value==='string'&&options.includes(value))?value:'Not assessed';
-  return options.map(v=>`<option value="${esc(v)}" ${v===current?'selected':''}>${esc(v)}</option>`).join('');
-}
-function ayurSelect(prefix,name,options,value){
-  const key=prefix+name;
-  return `<label>${name}<select data-w="${esc(key)}" data-ayur="1">${ayurOptions(options,value)}</select></label>`;
-}
-function wizardHtml(i){
- const d=wiz.data,scale=(name,val=2)=>`<label>${name}<select data-w="${name}">${scaleOptions(val)}</select></label>`;
- if(i===0)return`<div class="card"><h3>1. Patient Profile</h3><div class="formgrid"><label>Existing Child<select id="w_child"></select></label><label>Date<input id="w_date" type="date" value="${d.date||''}"></label><label>Visit Type<select id="w_type"><option>Initial Swarnaprashan</option><option>Monthly Follow-up</option><option>Clinical Review</option></select></label><label>Present Complaint<input id="w_complaint" value="${esc(d.complaint||'')}"></label><label>Allergy / Sensitivity<input id="w_allergy" value="${esc(d.allergy||'')}"></label><label>Current Medication<input id="w_currentMeds" value="${esc(d.currentMeds||'')}"></label></div><label>Relevant History<textarea id="w_history">${esc(d.history||'')}</textarea></label></div>`;
- if(i===1)return`<div class="card"><h3>2. Examination</h3><div class="formgrid"><label>Height cm<input id="w_height" type="number" step=".1" value="${d.height||''}"></label><label>Weight kg<input id="w_weight" type="number" step=".1" value="${d.weight||''}"></label><label>Temperature °F<input id="w_temp" type="number" step=".1" value="${d.temp||''}"></label><label>Pulse /min<input id="w_pulse" type="number" value="${d.pulse||''}"></label><label>RR /min<input id="w_rr" type="number" value="${d.rr||''}"></label><label>SpO₂ %<input id="w_spo2" type="number" value="${d.spo2||''}"></label><label>BP Systolic<input id="w_sys" type="number" value="${d.sys||''}"></label><label>BP Diastolic<input id="w_dia" type="number" value="${d.dia||''}"></label><label>General Appearance<input id="w_ga" value="${esc(d.ga||'')}"></label></div><div class="section"><h4>Functional Grading 0–4</h4><div class="scalegrid">${['Appetite','Bladder','Bowel','Sleep','Learning','Memory','Playing','School Performance','Energy'].map(x=>scale(x,d.examScores?.[x]??2)).join('')}</div></div><div class="section"><h4>Ashtavidha Pariksha — Ayurveda-specific findings</h4><div class="scalegrid">${Object.entries(ASHTAVIDHA_OPTIONS).map(([x,opts])=>ayurSelect('A:',x,opts,d.examScores?.['A:'+x])).join('')}</div></div><div class="section"><h4>Dashavidha Atura Pariksha — Ayurveda-specific assessment</h4><div class="scalegrid">${Object.entries(DASHAVIDHA_OPTIONS).map(([x,opts])=>ayurSelect('D:',x,opts,d.examScores?.['D:'+x])).join('')}</div><p class="tiny muted">Ahara Shakti is documented through Abhyavaharana Shakti and Jarana Shakti.</p></div><label>Examination Notes<textarea id="w_examNotes">${esc(d.examNotes||'')}</textarea></label></div>`;
- if(i===2)return`<div class="card"><h3>3. Investigations & Clinical Attachments</h3><div class="formgrid"><label>Investigation Summary<textarea id="w_invest">${esc(d.invest||'')}</textarea></label><label>Clinical Impression<textarea id="w_impression">${esc(d.impression||'')}</textarea></label><label>Red Flags / Safety Notes<textarea id="w_redflags">${esc(d.redflags||'')}</textarea></label></div><div class="upload-grid"><button type="button" id="w_direct_camera" class="uploadbox direct-camera-btn">📷 Open Camera Now<br><span>Live camera preview → Capture</span></button><label class="uploadbox">🖼 Gallery / 📎 File / PDF<input id="w_files" type="file" multiple accept="image/*,.pdf,.doc,.docx"></label></div><div id="w_camera_capture_name" class="selected-files"></div><p class="tiny muted">Files will be linked to this clinical entry when you press Save & Next.</p></div>`;
- if(i===3)return`<div class="card"><h3>4. Treatment Plan</h3><div class="formgrid"><label>Swarnaprashan Dose<input id="w_dose" value="${esc(d.dose||'')}"></label><label>Administered By<select id="w_administeredBy">${staffOptions(d.administeredBy||currentSession()?.name||'Dr Rajesh Sao')}</select></label><label>Number of Doses<input id="w_administeredQty" type="number" min="1" step="1" value="${Number(d.administeredQty)||1}"></label><label>Preparation / Batch<input id="w_batch" value="${esc(d.batch||'')}"></label><label>Next Follow-up<input id="w_next" type="date" value="${d.next||''}"></label><label>Other Medicines<textarea id="w_medicines">${esc(d.medicines||'')}</textarea></label><label>Diet / Pathya<textarea id="w_pathya">${esc(d.pathya||'')}</textarea></label><label>Apathya / Avoid<textarea id="w_apathya">${esc(d.apathya||'')}</textarea></label><label>Activity / Lifestyle<textarea id="w_lifestyle">${esc(d.lifestyle||'')}</textarea></label><label>School / Cognitive Advice<textarea id="w_cognitive">${esc(d.cognitive||'')}</textarea></label><label>Safety / Referral Advice<textarea id="w_safety">${esc(d.safety||'')}</textarea></label></div></div>`;
- if(i===4)return`<div class="card"><h3>5. Prescription Builder</h3><div class="formgrid"><label>Prescription Title<input id="w_rxTitle" value="${esc(d.rxTitle||'Digital Swarnaprashan Prescription')}"></label><label>Special Instructions<textarea id="w_rxInstructions">${esc(d.rxInstructions||'')}</textarea></label><label>Parent Message<textarea id="w_parentMsg">${esc(d.parentMsg||'')}</textarea></label></div><div class="section"><h4>Print Options</h4><label><input id="w_printGrowth" type="checkbox" ${d.printGrowth!==false?'checked':''}> Include growth summary</label><br><label><input id="w_printAssessment" type="checkbox" ${d.printAssessment!==false?'checked':''}> Include assessment summary</label><br><label><input id="w_printDocs" type="checkbox" ${d.printDocs!==false?'checked':''}> Include uploaded-document list</label></div></div>`;
- return`<div class="card"><h3>6. Review, Save, Print & Share</h3><div id="wizardReview"></div><div class="actionrow"><button onclick="app.generateCaseReport()">Generate Prescription</button><button class="ghost" onclick="app.printCaseReport()">Print / Save PDF</button><button class="ghost" onclick="app.shareCurrent()">Share</button><button class="ghost" onclick="app.whatsappCurrent()">WhatsApp</button></div></div><div id="caseReportPreview" class="reportpaper"></div>`;
-}
-function bindWizard(){
- const c=$('#w_child');if(c){options(c);c.value=wiz.data.childId||''}
- if(wiz.step===2 && $('#w_direct_camera')){
-   $('#w_direct_camera').onclick=()=>startDirectCamera('Investigation / Clinical Photo',async(file)=>{
-     wizardCameraFile=file;
-     $('#w_camera_capture_name').innerHTML=`<span class="file-chip">📷 ${esc(file.name)} captured</span>`;
-   });
- }
- if(wiz.step===5){$('#wizardReview').innerHTML=reviewHtml();generateCaseReport(false)}
-}
-async function collectWizard(){
- const d=wiz.data;
- if(wiz.step===0){d.childId=$('#w_child')?.value||d.childId;d.date=$('#w_date')?.value;d.type=$('#w_type')?.value;d.complaint=$('#w_complaint')?.value;d.allergy=$('#w_allergy')?.value;d.currentMeds=$('#w_currentMeds')?.value;d.history=$('#w_history')?.value}
- if(wiz.step===1){['height','weight','temp','pulse','rr','spo2','sys','dia','ga','examNotes'].forEach(k=>d[k]=$('#w_'+k)?.value);d.examScores={};$$('[data-w]').forEach(e=>d.examScores[e.dataset.w]=e.dataset.ayur==='1'?e.value:Number(e.value));d.bmi=d.height&&d.weight?(+d.weight/((+d.height/100)**2)).toFixed(2):''}
- if(wiz.step===2){d.invest=$('#w_invest')?.value;d.impression=$('#w_impression')?.value;d.redflags=$('#w_redflags')?.value;if(!wiz.caseId)wiz.caseId=uid();const arr=[];if(wizardCameraFile)arr.push(wizardCameraFile);if($('#w_files')?.files?.length)arr.push(...$('#w_files').files);for(const f of arr)await putDoc({id:uid(),childId:d.childId||'',caseId:wiz.caseId,type:'Investigation / Clinical Attachment',date:d.date||new Date().toISOString().slice(0,10),name:f.name,mime:f.type,size:f.size,blob:f,note:''});wizardCameraFile=null}
- if(wiz.step===3){['dose','batch','next','medicines','pathya','apathya','lifestyle','cognitive','safety'].forEach(k=>d[k]=$('#w_'+k)?.value);d.administeredBy=$('#w_administeredBy')?.value||d.administeredBy||currentSession()?.name||'Unassigned';d.administeredQty=Number($('#w_administeredQty')?.value)||1;}
- if(wiz.step===4){['rxTitle','rxInstructions','parentMsg'].forEach(k=>d[k]=$('#w_'+k)?.value);d.printGrowth=$('#w_printGrowth')?.checked;d.printAssessment=$('#w_printAssessment')?.checked;d.printDocs=$('#w_printDocs')?.checked}
-}
-function saveDraft(){if(!wiz.data.childId&&wiz.step>0){alert('Please select a child in Patient Profile');return}if(!wiz.caseId)wiz.caseId=uid();const item={id:wiz.caseId,...wiz.data,updatedAt:new Date().toISOString(),status:wiz.step===5?'Complete':'Draft'};const i=db.cases.findIndex(x=>x.id===item.id);i>=0?db.cases[i]=item:db.cases.push(item);save();if($('#draftStatus'))$('#draftStatus').textContent='Saved '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
-function reviewHtml(){const d=wiz.data,c=child(d.childId)||{};return`<div class="metricrow"><div class="metric"><span>Child</span><b>${esc(c.name||'-')}</b></div><div class="metric"><span>Date</span><b>${fmt(d.date)}</b></div><div class="metric"><span>Dose</span><b>${esc(d.dose||'-')}</b><small>${esc(d.administeredBy||'Not recorded')}</small></div><div class="metric"><span>BMI</span><b>${d.bmi||'-'}</b></div></div><div class="section"><h4>Clinical Impression</h4><p>${esc(d.impression||'-')}</p></div>`}
-async function generateCaseReport(scroll=true){
- const d=wiz.data,c=child(d.childId)||{},docs=(await getDocs()).filter(x=>x.childId===d.childId),el=$('#caseReportPreview')||$('#reportPaper');if(!el)return;
- let photo='';if(c.photoDocId){const pd=await docById(c.photoDocId);if(pd)photo=URL.createObjectURL(pd.blob)}
- el.innerHTML=`${letterhead(fmt(d.date), `${photo?`<img src="${photo}" class="avatar-lg">`:''}<div class="patient-head-id">${esc(c.regId||'')}<br>${fmt(d.date)}</div>`)}
- <div class="reportsection"><h3>Child Profile</h3><div class="metricrow"><div class="metric"><span>Name</span><b>${esc(c.name||'-')}</b><small>${age(c.dob)} • ${esc(c.sex||'')}</small></div><div class="metric"><span>Parent</span><b>${esc(c.parent||'-')}</b><small>${esc(c.mobile||'')}</small></div><div class="metric"><span>Height / Weight</span><b>${d.height||'-'} cm / ${d.weight||'-'} kg</b></div><div class="metric"><span>BMI</span><b>${d.bmi||'-'}</b></div></div></div>
- <div class="reportsection"><h3>Clinical Assessment</h3><p><b>Complaint:</b> ${esc(d.complaint||'-')}</p><p><b>Impression:</b> ${esc(d.impression||'-')}</p><p><b>Vitals:</b> Pulse ${d.pulse||'-'} • RR ${d.rr||'-'} • SpO₂ ${d.spo2||'-'}% • BP ${d.sys||'-'}/${d.dia||'-'}</p><p><b>Safety / Red flags:</b> ${esc(d.redflags||'None recorded')}</p></div>
- <div class="reportsection"><h3>Swarnaprashan & Treatment</h3><p><b>Swarnaprashan Dose:</b> ${esc(d.dose||'-')} &nbsp; <b>Preparation/Batch:</b> ${esc(d.batch||'-')}</p><p><b>Administered by:</b> ${esc(d.administeredBy||'Not recorded')} ${d.administeredQty?`• <b>Doses:</b> ${d.administeredQty}`:''}</p><p><b>Other medicines:</b> ${esc(d.medicines||'-')}</p><p><b>Next follow-up:</b> ${fmt(d.next)}</p></div>
- <div class="reportsection"><h3>Diet • Pathya • Lifestyle</h3><p><b>Pathya:</b> ${esc(d.pathya||'-')}</p><p><b>Apathya:</b> ${esc(d.apathya||'-')}</p><p><b>Activity/Lifestyle:</b> ${esc(d.lifestyle||'-')}</p><p><b>Learning/School advice:</b> ${esc(d.cognitive||'-')}</p></div>
- <div class="reportsection"><h3>Instructions</h3><p>${esc(d.rxInstructions||'-')}</p><p><b>Parent message:</b> ${esc(d.parentMsg||'-')}</p></div>
- ${d.printDocs!==false?`<div class="reportsection"><h3>Attached Clinical Documents</h3><ul>${docs.map(x=>`<li>${esc(x.type)} — ${esc(x.name)} (${fmt(x.date)})</li>`).join('')||'<li>No document attached</li>'}</ul></div>`:''}
- <div class="signature"><div class="signature-grid"><div><b>${esc(db.settings.doctor)}</b><br><span>${esc(db.settings.designation)}</span></div><div><b>${esc(db.settings.doctor2)}</b><br><span>${esc(db.settings.designation2)}</span></div></div><div class="signature-address">${esc(db.settings.address)} ${db.settings.phone?'• '+esc(db.settings.phone):''}<br>${esc(db.settings.footer)}</div></div>`;
- if(scroll)el.scrollIntoView({behavior:'smooth'});
-}
-function currentText(){const e=$('#caseReportPreview')||$('#reportPaper');return e?.innerText.trim()||''}
-async function shareCurrent(){const t=currentText();if(!t){alert('Generate report first');return}if(navigator.share)await navigator.share({title:'Mahamaya Clinic Swarnaprashan',text:t});else{await navigator.clipboard.writeText(t);alert('Copied to clipboard')}}
-function whatsappCurrent(){const t=currentText();if(!t){alert('Generate report first');return}window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank')}
-
-// children & baby photo
-let childAlpha=''; // legacy variable retained; alphabet UI removed in V11.14; V11.15 calendar/badge update
-
-function renderChildren(){
-  db.children=db.children.map(normalizeChild);
-  save();
-  $('#registerChildBtn').onclick=()=>editChild();
-  $('#showAllChildrenBtn').onclick=()=>{ $('#childStatusFilter').value=''; $('#childTaskFilter').value=''; if($('#childPaymentFilter'))$('#childPaymentFilter').value=''; if($('#childStaffFilter'))$('#childStaffFilter').value=''; $('#childSearch').value=''; childAlpha=''; drawChildren(''); };
-  $('#childSearch').oninput=()=>drawChildren($('#childSearch').value);
-  $('#childStatusFilter').onchange=()=>drawChildren($('#childSearch').value);
-  $('#childTaskFilter').onchange=()=>drawChildren($('#childSearch').value);
-  $('#childPaymentFilter').onchange=()=>drawChildren($('#childSearch').value);
-  $('#childStaffFilter').onchange=()=>drawChildren($('#childSearch').value);
-  renderRegistryKpis();
-  renderTodayPanel();
-  drawChildren('');
-}
-function renderRegistryKpis(){
-  const c=childOperationalCounts();
-  $('#registryKpis').innerHTML=[
-    ['Total Saved',c.total,'neutral'],
-    ['Active',c.active,'green'],
-    ['Ready',c.ready,'gold'],
-    ['Appointment Today',c.apptToday,'blue'],
-    ['Dose Taken Today',c.doseToday,'green'],
-    ['Reminder Today',c.remindersToday,'orange'],
-    ['Health Hold',c.hold,'red'],
-    ['Stopped',c.stopped,'gray'],
-    ['Payment Due',paymentSummary('all').dueChildren,'red']
-  ].map(x=>`<div class="ops-kpi ${x[2]}"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');
-}
-function renderTodayPanel(){
-  const today=isoToday();
-  const arr=normalizedChildren().filter(c=>c.appointmentDate===today || c.reminderDate===today || c.currentStatus==='Ready for Swarnaprashan');
-  $('#todayRegistryPanel').innerHTML=`<div class="today-head"><div><b>Today / Next Action Board</b><span>${fmt(today)}</span></div><span class="pill">${arr.length} child${arr.length===1?'':'ren'}</span></div>
-  <div class="today-grid">${arr.map(c=>`<div class="today-child">
-    <div class="today-contact-block">
-      <b>${esc(c.name)}</b>
-      <span><strong>Guardian:</strong> ${esc(c.parent||'Not entered')}</span>
-      <span><strong>Mobile:</strong> ${esc(c.mobile||'Not entered')}</span>
-      ${c.address?`<span><strong>Address:</strong> ${esc(c.address)}</span>`:''}
-    </div>
-    <span class="status-badge2 ${statusClass(c.currentStatus)}">${esc(c.currentStatus)}</span>
-    <div class="today-actions">
-      ${c.mobile?`<a href="${callLink(c.mobile)}" class="mini-action call-action">📞 Call ${esc(c.mobile)}</a><a href="${waLink(c.mobile,c.name)}" target="_blank" class="mini-action wa-action">WhatsApp</a>`:'<span class="missing-contact">Mobile not entered</span>'}
-      <button class="mini-action" onclick="app.openChildDetails('${c.id}')">Open Profile</button>
-    </div>
-  </div>`).join('')||'<p class="muted">No child is due today. Use Appointment / Reminder dates in child profiles.</p>'}</div>`;
-}
-async function editChild(id=''){
-  const c=normalizeChild(id?child(id):{});
-  let photo='';
-  if(c?.photoDocId){
-    try{ const pd=await docById(c.photoDocId); if(pd?.blob) photo=URL.createObjectURL(pd.blob); }catch(e){}
-  }
-  const regDefault=c.regId||('SW'+String(db.children.length+1).padStart(4,'0'));
-
-  $('#childEditor').innerHTML=`<div class="card profile-editor">
-    <div class="cardhead">
-      <div><span class="eyebrow">CHILD PROFILE + SWARNAPRASHAN STATUS</span><h3>${id?'Edit':'Register'} Child</h3><p class="muted">Profile saves first. Photo is recommended but does not block saving.</p></div>
-      <div class="profile-photo-panel">
-        ${photo?`<img id="photoPreview" src="${photo}" class="avatar-xl">`:`<div id="photoPreviewPlaceholder" class="avatar-xl avatar-placeholder">👶<span>Photo optional</span></div><img id="photoPreview" class="avatar-xl" style="display:none">`}
-        <span id="photoStatus" class="photo-status ${c.photoDocId?'ok':'pending'}">${c.photoDocId?'Identity photo saved':'Photo can be added now or later'}</span>
-      </div>
-    </div>
-
-    <div class="section profile-section">
-      <h4>Identity & Contact</h4>
-      <div class="formgrid">
-        <label>Child Name *<input id="c_name" value="${esc(c.name||'')}" placeholder="Full name"></label>
-        <label>Date of Birth<input id="c_dob" type="date" value="${c.dob||''}"></label>
-        <label>Sex<select id="c_sex"><option ${c.sex==='Male'?'selected':''}>Male</option><option ${c.sex==='Female'?'selected':''}>Female</option><option ${c.sex==='Other'?'selected':''}>Other</option></select></label>
-        <label>Parent / Guardian<input id="c_parent" value="${esc(c.parent||'')}"></label>
-        <label>Mobile / WhatsApp *<input id="c_mobile" inputmode="tel" value="${esc(c.mobile||'')}" placeholder="Guardian contact for reminders"></label>
-        <label>Registration ID<input id="c_reg" value="${esc(regDefault)}"></label>
-        <label>Registered By<select id="c_registeredBy">${staffOptions(c.registeredBy||currentSession()?.name||'Dr Rajesh Sao')}</select></label>
-        <label>School / Class<input id="c_school" value="${esc(c.school||'')}"></label>
-        <label>Short Address<input id="c_address" value="${esc(c.address||'')}"></label>
-        <label>Allergies<input id="c_allergy" value="${esc(c.allergies||'')}"></label>
-      </div>
-    </div>
-
-    <div class="section ops-section">
-      <h4>Swarnaprashan Current Status & Checklist</h4>
-      <div class="formgrid">
-        <label>Current Status<select id="c_status">${CHILD_STATUSES.map(s=>`<option ${c.currentStatus===s?'selected':''}>${s}</option>`).join('')}</select></label>
-        <label>Checklist<select id="c_task">${TASK_STATUSES.map(s=>`<option ${c.taskStatus===s?'selected':''}>${s}</option>`).join('')}</select></label>
-        <label>Appointment Date<input id="c_appointment" type="date" value="${c.appointmentDate||''}"></label>
-        <label>Reminder Date<input id="c_reminder" type="date" value="${c.reminderDate||''}"></label>
-        <label>Last Contact Date<input id="c_lastcontact" type="date" value="${c.lastContactDate||''}"></label>
-        <label>Home Medicine Qty<input id="c_homeqty" value="${esc(c.homeMedicineQty||'')}" placeholder="e.g. 5 tablets / 2 doses"></label>
-        <label>Next Action<input id="c_nextaction" value="${esc(c.nextAction||'')}" placeholder="Call / visit / dose / review"></label>
-        <label>Status Note<input id="c_statusnote" value="${esc(c.statusNote||'')}" placeholder="Reason / short note"></label>
-      </div>
-    </div>
-
-    <div class="section photo-section">
-      <h4>Baby Identity Photo</h4>
-      <div class="upload-grid">
-        <button type="button" id="c_direct_camera" class="uploadbox camera-box direct-camera-btn">📷 Open Camera Now<br><span>Live preview → Capture Photo</span></button>
-        <label class="uploadbox gallery-box">🖼 Choose from Gallery<input id="c_photo_gallery" type="file" accept="image/*"></label>
-      </div>
-      <div id="cameraCapturedName" class="selected-files"></div>
-    </div>
-
-    <label>Birth / Medical / Developmental History<textarea id="c_history">${esc(c.history||'')}</textarea></label>
-
-    <div id="childSaveStatus" class="login-status">Ready to save child profile.</div>
-    <div class="actionrow sticky-save-actions">
-      <button id="saveChild">Save Child Profile</button>
-      <button class="ghost" id="cancelChild">Cancel</button>
-    </div>
-  </div>`;
-
-  let selectedPhoto=null;
-  const showPreview=file=>{
-    if(!file)return;
-    selectedPhoto=file;
-    const u=URL.createObjectURL(file);
-    if($('#photoPreview')){ $('#photoPreview').src=u; $('#photoPreview').style.display='block'; }
-    if($('#photoPreviewPlaceholder')) $('#photoPreviewPlaceholder').style.display='none';
-    if($('#photoStatus')){ $('#photoStatus').textContent='Photo selected • will save with profile'; $('#photoStatus').className='photo-status ok'; }
-    $('#cameraCapturedName').innerHTML=`<span class="file-chip">📷 ${esc(file.name||'photo.jpg')}</span>`;
   };
 
-  $('#c_direct_camera').onclick=()=>startDirectCamera('Baby Identity Photo',file=>showPreview(file));
-  $('#c_photo_gallery').onchange=e=>showPreview(e.target.files?.[0]);
-
-  $('#saveChild').onclick=async()=>{
-    const status=$('#childSaveStatus');
-    const mark=(t,ok=true)=>{if(status){status.textContent=t;status.className='login-status '+(ok?'ok':'error')}};
-    try{
-      mark('Saving profile…');
-      const x=normalizeChild({
-        ...c,
-        id:id||uid(),
-        name:($('#c_name').value||'').trim(),
-        dob:$('#c_dob').value||'',
-        sex:$('#c_sex').value||'',
-        parent:$('#c_parent').value||'',
-        mobile:$('#c_mobile').value||'',
-        regId:($('#c_reg').value||regDefault).trim(),
-        registeredBy:$('#c_registeredBy')?.value||c.registeredBy||currentSession()?.name||'Unassigned',
-        registeredAt:c.registeredAt||(id?'':new Date().toISOString()),
-        lastUpdatedBy:currentSession()?.name||'Unassigned',
-        lastUpdatedAt:new Date().toISOString(),
-        school:$('#c_school').value||'',
-        address:$('#c_address').value||'',
-        allergies:$('#c_allergy').value||'',
-        history:$('#c_history').value||'',
-        currentStatus:$('#c_status').value||'Active',
-        taskStatus:$('#c_task').value||'Pending',
-        appointmentDate:$('#c_appointment').value||'',
-        reminderDate:$('#c_reminder').value||'',
-        lastContactDate:$('#c_lastcontact').value||'',
-        homeMedicineQty:$('#c_homeqty').value||'',
-        nextAction:$('#c_nextaction').value||'',
-        statusNote:$('#c_statusnote').value||'',
-        photoDocId:c.photoDocId||''
-      });
-
-      if(!x.name){mark('Child name is required.',false);alert('Child name is required.');return}
-      if(x.mobile && String(x.mobile).replace(/\D/g,'').length < 10){
-        mark('Please enter a valid guardian mobile number.',false);
-        alert('Guardian mobile number should contain at least 10 digits.');
-        return;
-      }
-      if(!x.mobile){
-        const continueWithout=confirm('Guardian mobile is blank. Without it, direct call/WhatsApp reminders will not be available. Save anyway?');
-        if(!continueWithout){mark('Please enter guardian mobile number.',false);return}
-      }
-
-      const duplicate=db.children.find(y=>y.id!==x.id && String(y.regId||'').toLowerCase()===x.regId.toLowerCase());
-      if(duplicate){mark('Registration ID already exists.',false);alert('Registration ID already exists.');return}
-
-      // IMPORTANT: save structured profile FIRST so photo storage can never block child registration.
-      const oldChildren=[...db.children];
-      if(id) db.children=db.children.map(y=>y.id===id?x:y); else db.children.push(x);
-      try{ save(); }
-      catch(e){ db.children=oldChildren; mark('Browser could not store this profile.',false); alert('Profile storage failed on this browser.'); return; }
-
-      // Photo is secondary; if it fails, profile remains saved.
-      if(selectedPhoto){
-        try{
-          const doc={id:uid(),childId:x.id,type:'Baby Profile Photo',date:isoToday(),name:selectedPhoto.name||'baby-photo.jpg',mime:selectedPhoto.type||'image/jpeg',size:selectedPhoto.size||0,blob:selectedPhoto,note:'Identity profile photo'};
-          await putDoc(doc);
-          x.photoDocId=doc.id;
-          db.children=db.children.map(y=>y.id===x.id?x:y);
-          save();
-        }catch(photoErr){
-          console.warn('Profile saved; photo save failed',photoErr);
-          alert('Child profile is saved. Photo could not be stored; you can add it later.');
-        }
-      }
-
-      mark(`Saved • ${x.name} • ${x.regId}`);
-      alert(`Saved successfully: ${x.name} (${x.regId})`);
-      $('#childEditor').innerHTML='';
-      renderRegistryKpis();
-      renderTodayPanel();
-      await drawChildren('');
-      $('#childrenList')?.scrollIntoView({behavior:'smooth',block:'start'});
-    }catch(err){
-      console.error(err);
-      mark('Unexpected save error.',false);
-      alert('Unexpected error while saving. Please retry.');
-    }
+  const updateBillTotal=()=>{
+    const qty=Math.max(1,Number($('#bQty').value||1));
+    const rate=Math.max(0,Number($('#bRate').value||0));
+    $('#bLiveTotal').textContent=money(qty*rate);
   };
 
-  $('#cancelChild').onclick=()=>$('#childEditor').innerHTML='';
-}
-async function drawChildren(q=''){
-  const statusFilter=$('#childStatusFilter')?.value||'';
-  const taskFilter=$('#childTaskFilter')?.value||'';
-  const paymentFilter=$('#childPaymentFilter')?.value||'';
-  const staffFilter=$('#childStaffFilter')?.value||'';
-  q=(q||'').toLowerCase().trim();
+  $('#bService').onchange=renderRateUI;
+  $('#bRate').oninput=updateBillTotal;
+  $('#bRate').onchange=()=>{validateRate(true);updateBillTotal()};
+  $('#bQty').oninput=updateBillTotal;
+  renderRateUI();
 
-  const num=s=>Number((String(s||'').match(/\d+/)||['999999'])[0]);
-  const arr=normalizedChildren()
-    .filter(c=>[c.name,c.parent,c.mobile,c.regId,c.address].join(' ').toLowerCase().includes(q))
-    .filter(c=>!statusFilter||c.currentStatus===statusFilter)
-    .filter(c=>!taskFilter||c.taskStatus===taskFilter)
-    .filter(c=>!paymentFilter||paymentStatus(latestPayment(c.id))===paymentFilter)
-    .filter(c=>{if(!staffFilter)return true;const a=childAudit(c);return [a.registeredBy,a.administeredBy,a.paymentBy].includes(staffFilter)})
-    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),undefined,{sensitivity:'base'})||num(a.regId)-num(b.regId));
-
-  if($('#registryFastCount')) $('#registryFastCount').textContent=db.children.length;
-
-  const cards=[];
-  for(let idx=0;idx<arr.length;idx++){
-    const c=arr[idx]; let p='';
-    if(c.photoDocId){
-      try{const d=await docById(c.photoDocId);if(d?.blob)p=URL.createObjectURL(d.blob)}catch(e){}
-    }
-    const audit=childAudit(c);
-    const pay=latestPayment(c.id);
-    const payStatus=paymentStatus(pay);
-    const balance=paymentBalance(pay);
-
-    cards.push(`<article class="child-fast-card">
-      <div class="child-fast-main">
-        <div class="child-fast-identity">
-          ${p?`<img src="${p}" class="child-fast-avatar" alt="${esc(c.name)}">`:`<div class="child-fast-avatar child-fast-avatar-placeholder">👶</div>`}
-          <div class="child-fast-title">
-            <div class="child-fast-name">${esc(c.name)}</div>
-            <div class="child-fast-meta"><span>${esc(c.regId||'-')}</span><span>${age(c.dob)}</span><span>${esc(c.sex||'-')}</span></div>
-          </div>
-        </div>
-
-        <div class="child-fast-actions" aria-label="Quick actions for ${esc(c.name)}">
-          <button class="fast-primary" onclick="app.openChildDetails('${c.id}')">Open Profile</button>
-          <button class="fast-edit" onclick="app.editChild('${c.id}')">Edit</button>
-          <button class="fast-clinical" onclick="app.startClinical('${c.id}')">+ Clinical Entry</button>
-          <button class="fast-payment" onclick="app.openChildDetails('${c.id}');setTimeout(()=>app.recordPayment('${c.id}'),120)">₹ Payment</button>
-        </div>
-      </div>
-
-      <div class="child-fast-info-grid">
-        <div class="child-fast-info">
-          <span>Guardian</span>
-          <b>${esc(c.parent||'Not entered')}</b>
-          <small>${esc(c.mobile||'Mobile not entered')}</small>
-          ${c.mobile?`<div class="child-fast-contact"><a href="${callLink(c.mobile)}">📞 Call</a><a target="_blank" href="${waLink(c.mobile,c.name)}">WhatsApp</a></div>`:`<button class="mini-add-mobile" onclick="app.editChild('${c.id}')">+ Add mobile</button>`}
-        </div>
-
-        <div class="child-fast-info">
-          <span>Current Status</span>
-          <div class="child-fast-badges">
-            <b class="status-badge2 ${statusClass(c.currentStatus)}">${esc(c.currentStatus)}</b>
-            <b class="task-badge ${taskClass(c.taskStatus)}">${esc(c.taskStatus)}</b>
-          </div>
-          <small>${c.appointmentDate?`Appointment: ${fmt(c.appointmentDate)}`:'No appointment date'}${c.reminderDate?` • Reminder: ${fmt(c.reminderDate)}`:''}</small>
-        </div>
-
-        <div class="child-fast-info">
-          <span>Payment</span>
-          <b class="payment-badge ${paymentStatusClass(payStatus)}">${esc(payStatus)}</b>
-          <small>${pay?`${money(pay.paid)} paid${balance?` • ${money(balance)} due`:''}`:'No payment entry'}</small>
-        </div>
-
-        <details class="child-fast-more">
-          <summary>More details</summary>
-          <div class="child-fast-more-grid">
-            <div><span>Registered by</span><b>${esc(audit.registeredBy)}</b></div>
-            <div><span>Swarnaprashan by</span><b>${esc(audit.administeredBy)}</b></div>
-            <div><span>Payment by</span><b>${esc(audit.paymentBy)}</b></div>
-            <div><span>Address</span><b>${esc(c.address||'Not entered')}</b></div>
-          </div>
-        </details>
-      </div>
-    </article>`);
-  }
-
-  $('#childrenList').innerHTML=`
-    <div class="registry-result-line">
-      <div><b>${arr.length}</b> result${arr.length===1?'':'s'} <span>• ${db.children.length} total saved</span></div>
-      ${q?`<div class="registry-query-chip">Search: <b>${esc(q)}</b></div>`:''}
-    </div>
-    <div class="child-fast-grid">
-      ${cards.join('')||`<div class="registry-empty"><b>No matching child found.</b><span>Try name, guardian, mobile, registration ID, or Reset filters.</span><button class="ghost" onclick="document.getElementById('showAllChildrenBtn').click()">Reset filters</button></div>`}
-    </div>`;
-}
-async function openChildDetails(id){
-  const c=normalizeChild(child(id));
-  if(!c)return;
-  let p='';
-  if(c.photoDocId){try{const d=await docById(c.photoDocId);if(d?.blob)p=URL.createObjectURL(d.blob)}catch(e){}}
-  const visits=fups(id);
-  $('#childDetailsPanel').innerHTML=`<div class="card child-detail-card">
-    <div class="cardhead">
-      <div class="profile-row">${p?`<img src="${p}" class="avatar-xl">`:`<div class="avatar-xl avatar-placeholder">👶</div>`}
-        <div><span class="eyebrow">SAVED CHILD PROFILE</span><h3>${esc(c.name)}</h3><p class="muted">${esc(c.regId||'-')} • ${age(c.dob)} • ${esc(c.sex||'-')}</p></div>
-      </div>
-      <button class="ghost" onclick="document.getElementById('childDetailsPanel').innerHTML=''">Close</button>
-    </div>
-    <div class="detail-grid">
-      <div><span>Guardian</span><b>${esc(c.parent||'-')}</b></div>
-      <div><span>Mobile / WhatsApp</span>${c.mobile?`<b class="detail-mobile">${esc(c.mobile)}</b><div class="contact-inline-actions"><a class="contact-call-btn" href="${callLink(c.mobile)}">📞 Call</a><a class="contact-wa-btn" target="_blank" href="${waLink(c.mobile,c.name)}">WhatsApp</a></div>`:'<b>Not entered</b>'}</div>
-      <div><span>Address</span><b>${esc(c.address||'-')}</b></div>
-      <div><span>Current Status</span><b class="status-badge2 ${statusClass(c.currentStatus)}">${esc(c.currentStatus)}</b></div>
-      <div><span>Checklist</span><b class="task-badge ${taskClass(c.taskStatus)}">${esc(c.taskStatus)}</b></div>
-      <div><span>Appointment</span><b>${c.appointmentDate?fmt(c.appointmentDate):'-'}</b></div>
-      <div><span>Reminder</span><b>${c.reminderDate?fmt(c.reminderDate):'-'}</b></div>
-      <div><span>Home Medicine</span><b>${esc(c.homeMedicineQty||'-')}</b></div>
-      <div><span>Registered By</span><b>${esc(auditName(c.registeredBy))}</b><small>${c.registeredAt?fmt(c.registeredAt):'Legacy record'}</small></div>
-      <div><span>Last Swarnaprashan By</span><b>${esc(auditName(latestAdministeredClinical(c.id)?.administeredBy))}</b><small>${latestAdministeredClinical(c.id)?.date?fmt(latestAdministeredClinical(c.id).date):'No attributed clinical entry'}</small></div>
-      <div><span>Payment Known/Received By</span><b>${esc(latestPayment(c.id)?paymentReceivedBy(latestPayment(c.id)):'Not recorded (legacy)')}</b></div>
-      <div><span>Payment Status</span>${(()=>{const p=latestPayment(c.id),s=paymentStatus(p);return `<b class="payment-badge ${paymentStatusClass(s)}">${esc(s)}</b>${p?`<small>${money(p.paid)} paid • ${money(paymentBalance(p))} due</small>`:''}`})()}</div>
-      <div><span>Total Follow-ups</span><b>${visits.length}</b></div>
-      <div><span>Next Action</span><b>${esc(c.nextAction||'-')}</b></div>
-      <div><span>Status Note</span><b>${esc(c.statusNote||'-')}</b></div>
-      <div><span>Last Contact</span><b>${c.lastContactDate?fmt(c.lastContactDate):'-'}</b></div>
-    </div>
-    <div class="actionrow">
-      <button onclick="app.editChild('${c.id}')">Edit Profile</button>
-      <button class="payment-action-btn" onclick="app.recordPayment('${c.id}')">₹ Record Payment</button>
-      <button class="ghost" onclick="app.startClinical('${c.id}')">Clinical Entry</button>
-      <button class="ghost" onclick="app.quickReport('${c.id}')">Report / Print</button>
-      <button class="ghost" onclick="app.shareChildProfile('${c.id}')">Share</button>
-      ${c.mobile?`<a class="button-anchor" href="${callLink(c.mobile)}">Call Guardian</a><a class="button-anchor" target="_blank" href="${waLink(c.mobile,c.name)}">WhatsApp Reminder</a>`:''}
-      <button class="danger-btn" onclick="app.deleteChild('${c.id}')">Delete</button>
-    </div>
-    <div class="section payment-history-section"><h4>Swarnaprashan Payment Ledger</h4><div id="childPaymentHistory">${paymentHistoryHtml(c.id)}</div></div>
-  </div>`;
-  $('#childDetailsPanel').scrollIntoView({behavior:'smooth',block:'start'});
-}
-
-function paymentHistoryHtml(childId){
-  const ps=childPayments(childId).slice().reverse();
-  if(!ps.length)return '<p class="muted">No payment transaction recorded yet.</p>';
-  return `<div class="payment-history-list">${ps.map(p=>`<div class="payment-history-row">
-    <div><b>${fmt(p.date)}</b><span>${esc(p.purpose||'Swarnaprashan')}</span></div>
-    <div><span class="payment-badge ${paymentStatusClass(paymentStatus(p))}">${esc(paymentStatus(p))}</span><small>${esc(p.method||'-')}</small></div>
-    <div><span>Billed</span><b>${money(p.amount)}</b><small>${p.quantity?`${p.quantity} × ${money(p.rate||currentSwarnaprashanRate())}`:''}</small></div>
-    <div><span>Paid</span><b>${money(p.paid)}</b></div>
-    <div><span>Due</span><b class="${paymentBalance(p)>0?'due-money':''}">${money(paymentBalance(p))}</b></div>
-    <div><small><b>Dose: ${esc(paymentAdministeredBy(p))}</b><br>Payment: ${esc(paymentReceivedBy(p))}<br>${esc(p.reference||p.note||'')}</small></div>
-    <div class="payment-history-actions"><button class="ghost" onclick="app.openPaymentReceipt('${p.id}')">Receipt / Bill</button></div>
-  </div>`).join('')}</div>`;
-}
-function recordPayment(childId){
-  const c=child(childId);if(!c)return;
-  const last=latestPayment(childId);
-  $('#childDetailsPanel').insertAdjacentHTML('afterbegin',`<div id="paymentEditorCard" class="card payment-editor-card">
-    <div class="cardhead"><div><span class="eyebrow">PAYMENT / COLLECTION</span><h3>Record Swarnaprashan Payment — ${esc(c.name)}</h3><p class="muted">${esc(c.regId||'-')} • ${age(c.dob)}</p></div><button class="ghost" onclick="document.getElementById('paymentEditorCard')?.remove()">Close</button></div>
-    <div class="formgrid payment-formgrid">
-      <label>Date<input id="pay_date" type="date" value="${isoToday()}"></label>
-      <label>Purpose<select id="pay_purpose">
-        <option>Clinic Swarnaprashan Dose</option>
-        <option>Home Use Medicine / Doses</option>
-        <option>Registration / Package</option>
-        <option>Previous Due Collection</option>
-        <option>Other</option>
-      </select></label>
-      <label>Quantity / Doses<input id="pay_qty" type="number" min="1" step="1" value="1"></label>
-      <label>Rate per Dose ₹<input id="pay_rate" type="number" min="0" step="1" value="${currentSwarnaprashanRate()}"></label>
-      <label>Payment Status<select id="pay_status">${PAYMENT_STATUSES.map(s=>`<option>${s}</option>`).join('')}</select></label>
-      <label>Payment Method<select id="pay_method">${PAYMENT_METHODS.map(s=>`<option>${s}</option>`).join('')}</select></label>
-      <label>Swarnaprashan Administered By<select id="pay_administeredBy">${staffOptions(currentSession()?.name||'Dr Rajesh Sao')}</select></label>
-      <label>Payment Received / Status Known By<select id="pay_receivedBy">${staffOptions(currentSession()?.name||'Dr Rajesh Sao')}</select></label>
-      <label>Total Amount ₹<input id="pay_amount" type="number" min="0" step="1" value="${currentSwarnaprashanRate()}"></label>
-      <label>Amount Received ₹<input id="pay_paid" type="number" min="0" step="1" value=""></label>
-      <label>Balance Due ₹<input id="pay_due" type="number" readonly value="0"></label>
-      <label>UPI / Receipt / Reference<input id="pay_ref" placeholder="Optional transaction / receipt reference"></label>
-      <label class="wide">Payment Note<input id="pay_note" placeholder="e.g. balance next Pushya, paid at reception, home-use prepaid"></label>
-    </div>
-    <div class="payment-quick-status">
-      <button class="ghost" type="button" onclick="app.setPaymentPreset('Paid')">Paid in Full</button>
-      <button class="ghost" type="button" onclick="app.setPaymentPreset('Pending')">Pending</button>
-      <button class="ghost" type="button" onclick="app.setPaymentPreset('Credit / Udhari')">Credit / Udhari</button>
-      <button class="ghost" type="button" onclick="app.setPaymentPreset('Home Use - Already Paid')">Home Use Already Paid</button>
-      <button class="ghost" type="button" onclick="app.setPaymentPreset('Complimentary / Free')">Complimentary / Free</button>
-    </div>
-    <div class="actionrow"><button id="savePaymentBtn">Save Payment Transaction</button></div>
-  </div>`);
-  const recalcBill=()=>{
-    const purpose=$('#pay_purpose').value;
-    const qty=Math.max(1,Number($('#pay_qty').value)||1);
-    const rate=Math.max(0,Number($('#pay_rate').value)||0);
-    if(['Clinic Swarnaprashan Dose','Home Use Medicine / Doses'].includes(purpose)){
-      $('#pay_amount').value=(qty*rate).toFixed(0);
-    }
-    const a=Number($('#pay_amount').value)||0,p=Number($('#pay_paid').value)||0;
-    $('#pay_due').value=Math.max(0,a-p);
-  };
-  $('#pay_qty').oninput=recalcBill;$('#pay_rate').oninput=recalcBill;$('#pay_purpose').onchange=recalcBill;
-  $('#pay_amount').oninput=recalcBill;$('#pay_paid').oninput=recalcBill;
-  recalcBill();
-  $('#pay_status').onchange=()=>{const s=$('#pay_status').value;if(['Paid','Home Use - Already Paid'].includes(s)){const a=Number($('#pay_amount').value)||0;$('#pay_paid').value=a}else if(['Pending','Credit / Udhari','Pay Later'].includes(s)){$('#pay_paid').value=0}else if(['Complimentary / Free','Waived / No Charge'].includes(s)){if(!$('#pay_amount').value)$('#pay_amount').value=0;$('#pay_paid').value=0}calc()};
-  $('#savePaymentBtn').onclick=()=>savePaymentTransaction(childId);
-  $('#paymentEditorCard').scrollIntoView({behavior:'smooth',block:'start'});
-}
-function setPaymentPreset(status){
-  const s=$('#pay_status');if(!s)return;s.value=status;
-  const method=$('#pay_method');
-  if(status==='Credit / Udhari')method.value='Credit / Udhari';
-  if(status==='Pay Later')method.value='Pay Later';
-  if(status==='Home Use - Already Paid'){method.value='Home Use Prepaid';$('#pay_purpose').value='Home Use Medicine / Doses'}
-  if(status==='Complimentary / Free')method.value='Complimentary / Free';
-  s.dispatchEvent(new Event('change'));
-}
-function savePaymentTransaction(childId){
-  const amount=Number($('#pay_amount').value)||0, paid=Number($('#pay_paid').value)||0;
-  let status=$('#pay_status').value;
-  if(status==='Paid' && amount>0 && paid<amount)status=paid>0?'Part Paid':'Pending';
-  if(status==='Part Paid' && paid>=amount && amount>0)status='Paid';
-  const p={
-    id:uid(),childId,date:$('#pay_date').value||isoToday(),purpose:$('#pay_purpose').value,
-    status,method:$('#pay_method').value,
-    administeredBy:$('#pay_administeredBy')?.value||currentSession()?.name||'Unassigned',
-    receivedBy:$('#pay_receivedBy')?.value||currentSession()?.name||'Unassigned',
-    amount,paid,
-    quantity:Number($('#pay_qty')?.value)||1,rate:Number($('#pay_rate')?.value)||currentSwarnaprashanRate(),
-    reference:$('#pay_ref').value||'',note:$('#pay_note').value||'',createdAt:new Date().toISOString(),
-    recordedBy:currentSession()?.name||currentSession()?.loginId||'Clinic User'
-  };
-  db.payments=db.payments||[];db.payments.push(p);save();
-  alert(`Payment saved • ${money(paid)} received • ${money(paymentBalance(p))} due`);
-  $('#paymentEditorCard')?.remove();
-  openChildDetails(childId);
-}
-
-
-function paymentById(id){return (db.payments||[]).find(p=>p.id===id)||null}
-function paymentReceiptHtml(paymentId){
-  const p=paymentById(paymentId);if(!p)return '';
-  const c=child(p.childId)||{};
-  const bal=paymentBalance(p),st=paymentStatus(p);
-  return `${letterhead(fmt(p.date),'<div class="patient-head-id">Swarnaprashan Receipt / Bill</div>')}
-  <div class="reportsection receipt-title">
-    <h2>Swarnaprashan Payment Receipt</h2>
-    <p class="muted">Digital clinic billing record</p>
-  </div>
-  <div class="metricrow">
-    <div class="metric"><span>Child</span><b>${esc(c.name||'-')}</b><small>${esc(c.regId||'-')} • ${c.dob?age(c.dob):''}</small></div>
-    <div class="metric"><span>Date</span><b>${fmt(p.date)}</b><small>${esc(p.purpose||'Swarnaprashan')}</small></div>
-    <div class="metric"><span>Status</span><b>${esc(st)}</b><small>${esc(p.method||'-')}</small></div>
-  </div>
-  <div class="reportsection">
-    <h3>Billing</h3>
-    <table><tbody>
-      <tr><td>Quantity / Doses</td><td><b>${Number(p.quantity)||1}</b></td></tr>
-      <tr><td>Rate</td><td><b>${money(p.rate||currentSwarnaprashanRate())} / dose</b></td></tr>
-      <tr><td>Total Amount</td><td><b>${money(p.amount)}</b></td></tr>
-      <tr><td>Amount Received</td><td><b>${money(p.paid)}</b></td></tr>
-      <tr><td>Balance Due</td><td><b>${money(bal)}</b></td></tr>
-    </tbody></table>
-  </div>
-  <div class="reportsection">
-    <h3>Clinic Accountability</h3>
-    <p><b>Swarnaprashan administered by:</b> ${esc(paymentAdministeredBy(p))}</p>
-    <p><b>Payment received / status known by:</b> ${esc(paymentReceivedBy(p))}</p>
-    <p><b>Payment mode:</b> ${esc(p.method||'-')}</p>
-    <p><b>Reference:</b> ${esc(p.reference||'-')}</p>
-    <p><b>Note:</b> ${esc(p.note||'-')}</p>
-  </div>
-  <div class="receipt-footer">Thank you. This is a digitally generated clinic transaction record.</div>`;
-}
-function paymentReceiptText(paymentId){
-  const p=paymentById(paymentId);if(!p)return '';
-  const c=child(p.childId)||{};
-  return `MAHAMAYA CLINIC — SWARNAPRASHAN RECEIPT
-Child: ${c.name||'-'} (${c.regId||'-'})
-Date: ${fmt(p.date)}
-Purpose: ${p.purpose||'Swarnaprashan'}
-Quantity: ${Number(p.quantity)||1}
-Rate: ${money(p.rate||currentSwarnaprashanRate())}/dose
-Bill: ${money(p.amount)}
-Received: ${money(p.paid)}
-Due: ${money(paymentBalance(p))}
-Status: ${paymentStatus(p)}
-Mode: ${p.method||'-'}
-Administered by: ${paymentAdministeredBy(p)}
-Payment received/status known by: ${paymentReceivedBy(p)}
-Reference: ${p.reference||'-'}
-Note: ${p.note||'-'}`;
-}
-function openPaymentReceipt(paymentId){
-  const html=paymentReceiptHtml(paymentId);if(!html){alert('Receipt not found.');return}
-  const host=$('#childDetailsPanel');if(!host)return;
-  host.insertAdjacentHTML('afterbegin',`<div id="paymentReceiptCard" class="card receipt-preview-card">
-    <div class="cardhead"><div><span class="eyebrow">BILL / RECEIPT</span><h3>Shareable Swarnaprashan Receipt</h3></div><button class="ghost" onclick="document.getElementById('paymentReceiptCard')?.remove()">Close</button></div>
-    <div id="paymentReceiptPaper" class="reportpaper">${html}</div>
-    <div class="actionrow receipt-actions">
-      <button onclick="app.printPaymentReceipt('${paymentId}')">Print / Save PDF</button>
-      <button class="ghost" onclick="app.whatsappPaymentReceipt('${paymentId}')">WhatsApp</button>
-      <button class="ghost" onclick="app.sharePaymentReceipt('${paymentId}')">Share Text</button>
-    </div>
-  </div>`);
-  $('#paymentReceiptCard').scrollIntoView({behavior:'smooth',block:'start'});
-}
-function printPaymentReceipt(paymentId){
-  const html=paymentReceiptHtml(paymentId);if(!html)return;
-  printHtmlContent(html,'Mahamaya Clinic - Swarnaprashan Receipt');
-}
-function whatsappPaymentReceipt(paymentId){
-  const t=paymentReceiptText(paymentId);if(!t)return;
-  window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank');
-}
-async function sharePaymentReceipt(paymentId){
-  const t=paymentReceiptText(paymentId);if(!t)return;
-  if(navigator.share){try{await navigator.share({title:'Swarnaprashan Receipt',text:t});return}catch{}}
-  try{await navigator.clipboard.writeText(t);alert('Receipt text copied.')}catch{alert(t)}
-}
-
-async function shareChildProfile(id){
-  const c=normalizeChild(child(id));if(!c)return;
-  const text=`Mahamaya Clinic • Swarnaprashan Child Profile
-Child: ${c.name}
-ID: ${c.regId||'-'}
-Age: ${age(c.dob)} • ${c.sex||'-'}
-Guardian: ${c.parent||'-'}
-Mobile: ${c.mobile||'-'}
-Address: ${c.address||'-'}
-Status: ${c.currentStatus}
-Checklist: ${c.taskStatus}
-Appointment: ${c.appointmentDate?fmt(c.appointmentDate):'-'}
-Reminder: ${c.reminderDate?fmt(c.reminderDate):'-'}
-Next Action: ${c.nextAction||'-'}`;
-  if(navigator.share) await navigator.share({title:'Swarnaprashan Child Profile',text});
-  else {await navigator.clipboard.writeText(text);alert('Child profile copied to clipboard.')}
-}
-async function deleteChild(id){
-  const c=child(id);if(!c)return;
-  if(!confirm(`Delete ${c.name}? This removes the child profile and linked structured follow-up entries.`))return;
-  db.children=db.children.filter(x=>x.id!==id);
-  db.followups=db.followups.filter(x=>x.childId!==id);
-  db.cases=db.cases.filter(x=>x.childId!==id);
-  db.vaccines=db.vaccines.filter(x=>x.childId!==id);
-  db.payments=(db.payments||[]).filter(x=>x.childId!==id);
-  save();
-  $('#childDetailsPanel').innerHTML='';
-  renderRegistryKpis();renderTodayPanel();drawChildren('');
-}
-function openChildrenStatus(label){
-  showView('children');
-  setTimeout(()=>{
-    const map={
-      'Active':'Active',
-      'Ready':'Ready for Swarnaprashan',
-      'Dose Taken Today':"Today's Dose Taken",
-      'Home Use':'Home Use Medicine',
-      'Health Hold':'Temporarily Hold - Health Issue',
-      'Stopped':'Swarnaprashan Stopped'
+  $('#saveBillBtn').onclick=()=>{
+    const s=getService(); if(!s)return;
+    if(!validateRate(true)) return;
+    const qty=Math.max(1,Number($('#bQty').value||1));
+    const rate=Number($('#bRate').value||0);
+    const amount=qty*rate;
+    const customName=$('#bCustomName').value.trim();
+    if((s.id==='FB-PATH')&&!customName)return alert('Please enter pathology test name.');
+    const finalName=customName?`${s.name}: ${customName}`:s.name;
+    const b={
+      id:uid('BILL'),date:$('#bDate').value,patient:$('#bPatient').value||'Walk-in',
+      items:[{
+        serviceId:s.id,group:s.group,name:finalName,qty,rate,amount,
+        rateMin:s.min,rateMax:s.max,rateReason:$('#bRateReason').value,rateNote:$('#bRateNote').value
+      }],
+      total:amount,
+      cash:Number($('#bCash').value||0),upi:Number($('#bUpi').value||0),card:Number($('#bCard').value||0),
+      bank:Number($('#bBank').value||0),advance:Number($('#bAdvance').value||0),
+      serviceBy:$('#bBy').value,paymentBy:$('#bPayBy').value,notes:$('#bNotes').value
     };
-    if(map[label]) $('#childStatusFilter').value=map[label];
-    drawChildren('');
-  },50);
-}
-
-// Followup
-const scales=['Appetite','Bladder','Bowel','Sleep','Learning','Memory','Playing','School Performance','Energy','Illness Frequency'];
-let followupCameraFile=null;
-function renderFollowup(){
- options($('#followupChild'));$('#followupChild').onchange=()=>drawTimeline($('#followupChild').value);
- $('#followupForm').innerHTML=`<div class="formgrid"><label>Child<select id="f_child"></select></label><label>Date<input id="f_date" type="date"></label><label>Swarnaprashan Dose<input id="f_dose"></label><label>Batch/Preparation<input id="f_batch"></label><label>Height cm<input id="f_height" type="number" step=".1"></label><label>Weight kg<input id="f_weight" type="number" step=".1"></label><label>Pulse<input id="f_pulse" type="number"></label><label>RR<input id="f_rr" type="number"></label><label>SpO₂<input id="f_spo2" type="number"></label><label>BP<input id="f_bp" placeholder="e.g. 100/60"></label></div>
- <div class="section"><h4>Health & Functional Grading 0–4</h4><div class="scalegrid">${scales.map(x=>`<div class="scalebox"><b>${x}</b><select data-fscore="${x}">${scaleOptions()}</select></div>`).join('')}</div></div>
- <div class="formgrid"><label>Current Health Issue<textarea id="f_issue"></textarea></label><label>Medical / Treatment Notes<textarea id="f_med"></textarea></label><label>Parent Observation<textarea id="f_parent"></textarea></label></div>
- <div class="upload-grid"><button type="button" id="f_direct_camera" class="uploadbox direct-camera-btn">📷 Open Camera Now<br><span>Live camera preview → Capture</span></button><label class="uploadbox">📎 Follow-up File / PDF<input id="f_files" type="file" multiple accept="image/*,.pdf,.doc,.docx"></label></div><div id="f_camera_capture_name" class="selected-files"></div><button id="saveFollow">Save Follow-up</button>`;
- options($('#f_child'));$('#f_date').value=new Date().toISOString().slice(0,10);
- $('#f_direct_camera').onclick=()=>startDirectCamera('Follow-up Clinical Photo',async(file)=>{followupCameraFile=file;$('#f_camera_capture_name').innerHTML=`<span class="file-chip">📷 ${esc(file.name)} captured</span>`});
- $('#saveFollow').onclick=saveFollow;
-}
-async function saveFollow(){const id=$('#f_child').value;if(!id){alert('Select child');return}const s={};$$('[data-fscore]').forEach(e=>s[e.dataset.fscore]=Number(e.value));const h=+$('#f_height').value||0,w=+$('#f_weight').value||0,followId=uid();db.followups.push({id:followId,childId:id,date:$('#f_date').value,dose:$('#f_dose').value,batch:$('#f_batch').value,height:h,weight:w,bmi:h&&w?(w/((h/100)**2)).toFixed(2):'',pulse:$('#f_pulse').value,rr:$('#f_rr').value,spo2:$('#f_spo2').value,bp:$('#f_bp').value,scores:s,issue:$('#f_issue').value,med:$('#f_med').value,parent:$('#f_parent').value});const arr=[];if(followupCameraFile)arr.push(followupCameraFile);if($('#f_files').files.length)arr.push(...$('#f_files').files);for(const f of arr)await putDoc({id:uid(),childId:id,followupId:followId,type:'Follow-up Attachment',date:$('#f_date').value,name:f.name,mime:f.type,size:f.size,blob:f,note:''});followupCameraFile=null;save();alert('Follow-up saved');showView('followup');$('#followupChild').value=id;drawTimeline(id)}
-function drawTimeline(id){const fs=fups(id);$('#followupTimeline').innerHTML=!id?'<p class="muted">Select a child.</p>':`<table><thead><tr><th>Date</th><th>Dose</th><th>Growth</th><th>Vitals</th><th>Health</th><th>Overall</th></tr></thead><tbody>${fs.map((f,i)=>`<tr><td>${fmt(f.date)}</td><td>${esc(f.dose||'-')}</td><td>${f.height||'-'} cm • ${f.weight||'-'} kg<br>BMI ${f.bmi||'-'}</td><td>P ${f.pulse||'-'} • SpO₂ ${f.spo2||'-'}<br>BP ${esc(f.bp||'-')}</td><td>${esc(f.issue||'No issue')}</td><td>${i?trend(avg(fs[i-1].scores),avg(f.scores)):'Baseline'}</td></tr>`).join('')}</tbody></table>`}
-
-// Analytics
-function renderAnalytics(){options($('#analyticsChild'));$('#analyticsChild').onchange=()=>drawAnalytics($('#analyticsChild').value);$('#analyticSummary').innerHTML='<p class="muted">Select a child.</p>'}
-function drawAnalytics(id){
- const fs=fups(id);if(!fs.length){$('#analyticSummary').innerHTML='<p class="muted">No follow-up data.</p>';if($('#growthInterpretation'))$('#growthInterpretation').innerHTML='';return}
- const a=fs[0],b=fs.at(-1);
- let months=0;if(a.date&&b.date)months=Math.max(0,(new Date(b.date)-new Date(a.date))/(1000*60*60*24*30.4375));
- const hv=(months&&a.height&&b.height)?((+b.height-+a.height)/months).toFixed(2):'';
- const wv=(months&&a.weight&&b.weight)?((+b.weight-+a.weight)/months).toFixed(2):'';
- $('#analyticSummary').innerHTML=`<div class="metric"><span>Visits</span><b>${fs.length}</b></div><div class="metric"><span>Latest Height</span><b>${b.height||'-'} cm</b></div><div class="metric"><span>Latest Weight</span><b>${b.weight||'-'} kg</b></div><div class="metric"><span>Latest BMI</span><b>${b.bmi||'-'}</b></div><div class="metric"><span>Height Velocity</span><b>${hv?hv+' cm/month':'-'}</b></div><div class="metric"><span>Weight Velocity</span><b>${wv?wv+' kg/month':'-'}</b></div>`;
- if($('#growthInterpretation'))$('#growthInterpretation').innerHTML='<b>Clinical interpretation:</b> Plot serial values against age- and sex-specific pediatric standards. WHO Child Growth Standards apply to 0–5 years and WHO Growth Reference 2007 to 5–19 years. Do not interpret a child using adult BMI cut-offs; trend and z-score/percentile trajectory matter.';
- drawLine($('#lineChart'),fs);drawBars($('#barChart'),a,b);drawPie($('#pieChart'),b);
- $('#baselineLatest').innerHTML=`<table><thead><tr><th>Parameter</th><th>Baseline</th><th>Latest</th><th>Trend</th></tr></thead><tbody>${scales.map(k=>`<tr><td>${k}</td><td>${scoreLabel(a.scores?.[k])}</td><td>${scoreLabel(b.scores?.[k])}</td><td>${trend(a.scores?.[k],b.scores?.[k])}</td></tr>`).join('')}</tbody></table>`;
-}
-function drawLine(c,fs){const ctx=c.getContext('2d'),W=c.width,H=c.height;ctx.clearRect(0,0,W,H);ctx.strokeStyle='#e5e5e5';for(let i=1;i<6;i++){let y=i*H/6;ctx.beginPath();ctx.moveTo(50,y);ctx.lineTo(W-20,y);ctx.stroke()}[['weight','#2d7755'],['height','#b68733'],['bmi','#3f6d9c']].forEach(([k,col])=>{const vals=fs.map(f=>+f[k]).filter(Boolean);if(!vals.length)return;const min=Math.min(...vals),max=Math.max(...vals);ctx.strokeStyle=col;ctx.lineWidth=3;ctx.beginPath();fs.forEach((f,i)=>{let v=+f[k];if(!v)return;let x=55+i*(W-90)/Math.max(1,fs.length-1),y=H-35-(v-min)/Math.max(1,max-min)*(H-75);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke()})}
-function drawBars(c,a,b){const ctx=c.getContext('2d'),W=c.width,H=c.height;ctx.clearRect(0,0,W,H);const keys=['Learning','Memory','Playing','School Performance','Appetite','Sleep'],bw=(W-80)/(keys.length*2.4);keys.forEach((k,i)=>{const x=45+i*(W-80)/keys.length,va=+a.scores?.[k]||0,vb=+b.scores?.[k]||0;ctx.fillStyle='#d7c6aa';ctx.fillRect(x,H-35-va*(H-80)/4,bw,va*(H-80)/4);ctx.fillStyle='#5f4327';ctx.fillRect(x+bw+5,H-35-vb*(H-80)/4,bw,vb*(H-80)/4);ctx.fillStyle='#555';ctx.font='12px sans-serif';ctx.fillText(k.slice(0,8),x,H-12)})}
-function drawPie(c,b){const ctx=c.getContext('2d'),W=c.width,H=c.height;ctx.clearRect(0,0,W,H);const vals=Object.values(b.scores||{}).map(Number),counts=[0,0,0,0,0],cols=['#b14f4f','#d58b55','#d4b25c','#5f9d78','#2d7755'];vals.forEach(v=>counts[v]++);let start=-Math.PI/2,total=Math.max(1,vals.length);counts.forEach((n,i)=>{const ang=2*Math.PI*n/total;ctx.beginPath();ctx.moveTo(W/2,H/2);ctx.fillStyle=cols[i];ctx.arc(W/2,H/2,120,start,start+ang);ctx.fill();start+=ang});ctx.fillStyle='#555';ctx.font='13px sans-serif';counts.forEach((n,i)=>ctx.fillText(`${scoreLabel(i)}: ${n}`,20,28+i*22))}
-
-// Vaccination & schedule
-function renderVaccination(){options($('#vaxChild'));options($('#vaxFilter'));$('#vaxDate').value=new Date().toISOString().slice(0,10);$('#saveVax').onclick=()=>{if(!$('#vaxChild').value){alert('Select child');return}db.vaccines.push({id:uid(),childId:$('#vaxChild').value,name:$('#vaxName').value,date:$('#vaxDate').value,status:$('#vaxStatus').value,note:$('#vaxNote').value});save();drawVax()};$('#vaxFilter').onchange=drawVax;drawVax()}
-function drawVax(){const id=$('#vaxFilter')?.value||'';const a=db.vaccines.filter(v=>!id||v.childId===id).sort((x,y)=>String(y.date).localeCompare(String(x.date)));$('#vaxList').innerHTML=a.map(v=>{const c=child(v.childId)||{};return`<div class="docitem"><b>${esc(v.name||'Vaccine')}</b><div>${esc(c.name||'')} • ${fmt(v.date)} • ${esc(v.status)}</div><div class="docmeta">${esc(v.note||'')}</div></div>`}).join('')||'<p class="muted">No vaccination entries.</p>'}
-
-// Documents
-let pickedFiles=[];
-async function renderDocuments(){options($('#docChild'));options($('#docFilterChild'));$('#docDate').value=new Date().toISOString().slice(0,10);pickedFiles=[];
- $('#directDocCamera').onclick=()=>startDirectCamera('Document / Manual Card Photo',async(file)=>{pickedFiles.push(file);renderPicked()});
- $('#fileInput').onchange=e=>{pickedFiles.push(...e.target.files);renderPicked()};$('#saveDocs').onclick=saveDocs;$('#docFilterChild').onchange=drawDocs;await drawDocs()}
-function renderPicked(){$('#selectedFiles').innerHTML=pickedFiles.map(f=>`<span class="file-chip">${esc(f.name)} • ${(f.size/1024).toFixed(0)} KB</span>`).join('')}
-async function saveDocs(){const id=$('#docChild').value;if(!id){alert('Select child');return}if(!pickedFiles.length){alert('Capture or select at least one file');return}for(const f of pickedFiles)await putDoc({id:uid(),childId:id,type:$('#docType').value,date:$('#docDate').value,note:$('#docNote').value,name:f.name,mime:f.type,size:f.size,blob:f});pickedFiles=[];renderPicked();alert('Document(s) saved');drawDocs()}
-async function drawDocs(){const filter=$('#docFilterChild')?.value||'',docs=(await getDocs()).filter(d=>!filter||d.childId===filter).sort((a,b)=>String(b.date).localeCompare(String(a.date)));$('#docList').innerHTML=docs.map(d=>{const c=child(d.childId)||{};return`<div class="docitem"><b>${esc(d.type)}</b><div>${esc(d.name)}</div><div class="docmeta">${esc(c.name||'')} • ${fmt(d.date)} • ${(d.size/1024).toFixed(0)} KB</div><div class="actionrow"><button class="ghost" onclick="app.openDoc('${d.id}')">Open</button><button class="ghost" onclick="app.downloadDoc('${d.id}')">Download</button><button class="ghost" onclick="app.removeDoc('${d.id}')">Delete</button></div></div>`}).join('')||'<p class="muted">No documents saved.</p>'}
-async function openDoc(id){const d=await docById(id);if(d)window.open(URL.createObjectURL(d.blob),'_blank')}
-async function downloadDoc(id){const d=await docById(id);if(!d)return;const a=document.createElement('a');a.href=URL.createObjectURL(d.blob);a.download=d.name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500)}
-async function removeDoc(id){if(confirm('Delete this document?')){await delDoc(id);drawDocs()}}
-function openQuickUpload(){showView('documents')}
-
-// Reports
-let rxPickedFiles=[];
-function renderReports(){
-  options($('#reportChild'));
-  $('#generateReport').onclick=generateSelectedReport;
-  $('#printReport').onclick=printParentReport;
-  $('#shareReport').onclick=shareReport;
-  $('#waReport').onclick=waReport;
-  rxPickedFiles=[];
-  $('#rxDirectCamera').onclick=()=>startDirectCamera('Manual Prescription / Card Photo',async(file)=>{rxPickedFiles.push(file);renderRxPicked()});
-  $('#rxFileInput').onchange=e=>{rxPickedFiles.push(...e.target.files);renderRxPicked()};
-  $('#saveRxAttachments').onclick=saveRxAttachments;
-  $('#reportChild').onchange=drawRxAttachments;
-  drawRxAttachments();
-}
-function renderRxPicked(){
-  $('#rxPickedFiles').innerHTML=rxPickedFiles.map(f=>`<span class="file-chip">${esc(f.name)} • ${(f.size/1024).toFixed(0)} KB</span>`).join('');
-}
-async function saveRxAttachments(){
-  const childId=$('#reportChild').value;
-  if(!childId){alert('Please select a child first.');return}
-  if(!rxPickedFiles.length){alert('Capture or select at least one prescription file.');return}
-  const note=$('#rxAttachNote').value;
-  for(const f of rxPickedFiles){
-    await putDoc({id:uid(),childId,type:'Manual / Previous Prescription',date:new Date().toISOString().slice(0,10),note,name:f.name,mime:f.type,size:f.size,blob:f});
-  }
-  rxPickedFiles=[];renderRxPicked();$('#rxFileInput').value='';$('#rxAttachNote').value='';
-  alert('Prescription attachment(s) saved.');
-  drawRxAttachments();
-}
-async function drawRxAttachments(){
-  const childId=$('#reportChild')?.value||'';
-  if(!$('#rxSavedAttachments'))return;
-  const docs=(await getDocs()).filter(d=>(!childId||d.childId===childId)&&d.type==='Manual / Previous Prescription').sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-  $('#rxSavedAttachments').innerHTML=docs.map(d=>`<div class="docitem"><b>${esc(d.name)}</b><div class="docmeta">${fmt(d.date)} ${d.note?'• '+esc(d.note):''}</div><div class="actionrow"><button class="ghost" onclick="app.openDoc('${d.id}')">Open</button><button class="ghost" onclick="app.downloadDoc('${d.id}')">Download</button></div></div>`).join('')||'<p class="muted">No manual prescription attachment saved for the selected child.</p>';
-}
-async function generateSelectedReport(){
- const id=$('#reportChild').value;if(!id){alert('Select child');return}
- const c=child(id),fs=fups(id),latest=fs.at(-1),cases=db.cases.filter(x=>x.childId===id).sort((a,b)=>String(a.date).localeCompare(String(b.date))),cs=cases.at(-1),docs=(await getDocs()).filter(x=>x.childId===id),first=fs[0];
- let photo='';if(c.photoDocId){const pd=await docById(c.photoDocId);if(pd)photo=URL.createObjectURL(pd.blob)}
- const functional=cs?.examScores?Object.entries(cs.examScores).filter(([k,v])=>!k.startsWith('A:')&&!k.startsWith('D:')):[];
- const ashta=cs?.examScores?Object.entries(cs.examScores).filter(([k,v])=>k.startsWith('A:')):[];
- const dasha=cs?.examScores?Object.entries(cs.examScores).filter(([k,v])=>k.startsWith('D:')):[];
- const table=(rows)=>rows.length?`<table><tbody>${rows.map(([k,v])=>`<tr><td>${esc(k.replace(/^[AD]:/,''))}</td><td><b>${esc(String(v))}</b></td></tr>`).join('')}</tbody></table>`:'<p class="muted">Not recorded.</p>';
- $('#reportPaper').innerHTML=`${letterhead(fmt(latest?.date||cs?.date), `${photo?`<img src="${photo}" class="avatar-lg">`:''}<div class="patient-head-id">${esc(c.regId||'')}<br>${fmt(latest?.date||cs?.date)}</div>`)}
- <div class="reportsection"><h3>Child Profile</h3><div class="metricrow"><div class="metric"><span>Name</span><b>${esc(c.name)}</b><small>${age(c.dob)} • ${esc(c.sex||'')}</small></div><div class="metric"><span>Parent</span><b>${esc(c.parent||'-')}</b><small>${esc(c.mobile||'')}</small></div><div class="metric"><span>Follow-ups</span><b>${fs.length}</b></div><div class="metric"><span>Clinical Entries</span><b>${cases.length}</b></div></div><p><b>Allergies:</b> ${esc(c.allergies||cs?.allergy||'-')} &nbsp; <b>School/Class:</b> ${esc(c.school||'-')}</p><p><b>Relevant history:</b> ${esc(cs?.history||c.history||'-')}</p></div>
- ${latest?`<div class="reportsection"><h3>Latest Growth & Vitals</h3><p>Height ${latest.height||'-'} cm • Weight ${latest.weight||'-'} kg • BMI ${latest.bmi||'-'} • Pulse ${latest.pulse||'-'} • RR ${latest.rr||'-'} • SpO₂ ${latest.spo2||'-'}% • BP ${esc(latest.bp||'-')}</p><p><b>Latest dose:</b> ${esc(latest.dose||'-')} &nbsp; <b>Health issue:</b> ${esc(latest.issue||'None recorded')}</p></div>`:''}
- ${cs?`<div class="reportsection"><h3>Complete Latest Clinical Entry</h3><p><b>Date / Visit:</b> ${fmt(cs.date)} • ${esc(cs.type||'-')}</p><p><b>Present complaint:</b> ${esc(cs.complaint||'-')}</p><p><b>Current medicines:</b> ${esc(cs.currentMeds||'-')}</p><p><b>General appearance:</b> ${esc(cs.ga||'-')}</p><p><b>Examination notes:</b> ${esc(cs.examNotes||'-')}</p><p><b>Investigation summary:</b> ${esc(cs.invest||'-')}</p><p><b>Clinical impression:</b> ${esc(cs.impression||'-')}</p><p><b>Red flags / safety:</b> ${esc(cs.redflags||'None recorded')}</p></div>
- <div class="reportsection"><h3>Functional Assessment</h3>${table(functional)}</div>
- <div class="reportsection"><h3>Ashtavidha Pariksha</h3>${table(ashta)}</div>
- <div class="reportsection"><h3>Dashavidha Atura Pariksha</h3>${table(dasha)}</div>
- <div class="reportsection"><h3>Treatment & Prescription</h3><p><b>Swarnaprashan:</b> ${esc(cs.dose||'-')} • ${esc(cs.batch||'-')}</p><p><b>Other medicines:</b> ${esc(cs.medicines||'-')}</p><p><b>Pathya:</b> ${esc(cs.pathya||'-')}</p><p><b>Apathya:</b> ${esc(cs.apathya||'-')}</p><p><b>Lifestyle:</b> ${esc(cs.lifestyle||'-')}</p><p><b>Cognitive/School advice:</b> ${esc(cs.cognitive||'-')}</p><p><b>Safety/Referral advice:</b> ${esc(cs.safety||'-')}</p><p><b>Special instructions:</b> ${esc(cs.rxInstructions||'-')}</p><p><b>Parent message:</b> ${esc(cs.parentMsg||'-')}</p><p><b>Next follow-up:</b> ${fmt(cs.next)}</p></div>`:''}
- ${first&&latest?`<div class="reportsection"><h3>Baseline vs Latest Functional Progress</h3><table><thead><tr><th>Parameter</th><th>Baseline</th><th>Latest</th><th>Trend</th></tr></thead><tbody>${scales.map(k=>`<tr><td>${k}</td><td>${scoreLabel(first.scores?.[k])}</td><td>${scoreLabel(latest.scores?.[k])}</td><td>${trend(first.scores?.[k],latest.scores?.[k])}</td></tr>`).join('')}</tbody></table></div>`:''}
- ${$('#incDocs').checked?`<div class="reportsection"><h3>Documents</h3><ul>${docs.map(d=>`<li>${esc(d.type)} — ${esc(d.name)} — ${fmt(d.date)}</li>`).join('')||'<li>No attachment</li>'}</ul></div>`:''}
- <div class="signature"><div class="signature-grid"><div><b>${esc(db.settings.doctor)}</b><br><span>${esc(db.settings.designation)}</span></div><div><b>${esc(db.settings.doctor2)}</b><br><span>${esc(db.settings.designation2)}</span></div></div><div class="signature-address">${esc(db.settings.address)} ${db.settings.phone?'• '+esc(db.settings.phone):''}<br>${esc(db.settings.footer)}</div></div>`;
-}
-async function shareReport(){const t=$('#reportPaper').innerText.trim();if(!t){alert('Generate report first');return}if(navigator.share)await navigator.share({title:'Swarnaprashan Report',text:t});else{await navigator.clipboard.writeText(t);alert('Copied')}}
-function waReport(){const t=$('#reportPaper').innerText.trim();if(!t){alert('Generate report first');return}window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank')}
-function quickReport(id){showView('reports');$('#reportChild').value=id;generateSelectedReport()}
-
-// Swarnaprashan Knowledge Centre
-function knowledgeHtml(lang='en'){
- const g=SWARNA_GUIDE[lang]||SWARNA_GUIDE.en;
- const upcoming=PUSHYA_DATES.filter(x=>new Date(x.date+'T00:00:00')>=new Date(new Date().toISOString().slice(0,10)+'T00:00:00')).slice(0,13);
- return `${letterhead(new Date().toLocaleDateString('en-IN'),'<div class="patient-head-id">Parent Education</div>')}
- <div class="reportsection"><h2>${esc(g.title)}</h2><p>${esc(g.intro)}</p></div>
- ${g.sections.map(([h,p])=>`<div class="reportsection"><h3>${esc(h)}</h3><p>${esc(p)}</p></div>`).join('')}
- <div class="reportsection"><h3>${lang==='hi'?'आगामी पुष्य नक्षत्र reference dates':'Upcoming Pushya Nakshatra reference dates'}</h3><div class="pushya-year">${upcoming.map(x=>`<span class="pushya-chip">${esc(x.label)}</span>`).join('')}</div><p class="tiny">Exact local Raipur timings should be verified before clinic publication.</p></div>
- <div class="reportsection evidence-box"><h3>${lang==='hi'?'साक्ष्य एवं सुरक्षा':'Evidence & Safety'}</h3><p>${lang==='hi'?'यह जानकारी parent education के लिए है और individual prescription का विकल्प नहीं है। Vaccination और आवश्यक pediatric care जारी रखें।':'This information is for parent education and is not a substitute for an individual prescription. Continue vaccination and indicated pediatric care.'}</p></div>`;
-}
-function renderKnowledge(){
- const lang=$('#knowledgeLang');const paper=$('#knowledgePaper');
- const draw=()=>paper.innerHTML=knowledgeHtml(lang.value);
- lang.onchange=draw;draw();
- $('#knowledgeShare').onclick=async()=>{const t=paper.innerText.trim();if(navigator.share)await navigator.share({title:'Swarnaprashan Parent Guide',text:t});else{await navigator.clipboard.writeText(t);alert('Guide copied to clipboard')}};
- $('#knowledgeWA').onclick=()=>{const t=paper.innerText.trim();window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank')};
- $('#knowledgePrint').onclick=()=>printHtmlContent(paper.innerHTML,'Mahamaya Clinic - Swarnaprashan Parent Guide');
-}
-
-// Education
-function renderEducation(){options($('#eduChild'));$('#buildPlan').onclick=buildPlan}
-function buildPlan(){const id=$('#eduChild').value;if(!id){alert('Select child');return}const c=child(id),focus=$('#eduFocus').value,map={'General Swarnaprashan Support':['Balanced age-appropriate meals','Regular sleep-wake timing','Daily outdoor play and physical activity','Adequate hydration','Limit excessive packaged foods and late-night screen exposure'],'Low Appetite':['Small frequent nutritious meals','Avoid grazing/snacks just before meals','Track weight and growth trend','Clinical review if persistent appetite loss or weight loss'],'Constipation':['Adequate fluids','Fiber-rich fruits/vegetables','Regular toilet routine','Daily physical activity','Medical review for pain, blood, vomiting or persistent symptoms'],'Poor Sleep':['Consistent sleep routine','Reduce evening screen exposure','Quiet bedtime routine','Avoid heavy late meals','Assess persistent snoring/breathing difficulty'],'Frequent Illness':['Hand hygiene','Adequate sleep','Balanced diet','Vaccination review','Clinical review for recurrent severe infections or poor growth'],'Learning / Memory Support':['Adequate sleep','Structured study-play balance','Reading/recall exercises','Healthy nutrition/hydration','School or developmental assessment if persistent difficulty'],'Underweight / Poor Growth':['Track serial height/weight','Energy and protein adequacy','Review feeding pattern','Assess recurrent illness/GI symptoms','Pediatric/nutrition review when clinically indicated']};$('#planPaper').innerHTML=`<div class="reporthead"><div><h2>${esc(db.settings.clinicName)}</h2><b>Parent Diet • Pathya • Lifestyle Plan</b></div><div>${esc(c.name)}</div></div><div class="reportsection"><h3>${esc(focus)}</h3><ul>${map[focus].map(x=>`<li>${x}</li>`).join('')}</ul></div><div class="reportsection"><h3>Pathya</h3><p>Fresh, simple, seasonal, well-tolerated food; regular routine; adequate hydration, sleep and play.</p><h3>Apathya</h3><p>Excess junk food, irregular meals, chronic sleep deprivation, excessive screen exposure and unnecessary self-medication.</p></div><div class="signature">${esc(db.settings.doctor)}</div>`}
-
-
-// Inventory & stock
-function renderInventory(){
-  drawInventoryDashboard();
-  $('#newPurchaseBtn').onclick=()=>openInventoryEditor('Purchase');
-  $('#newUsageBtn').onclick=()=>openInventoryEditor('Clinic Use');
-  $('#inventoryFilter').onchange=drawInventoryLedger;
-}
-function drawInventoryDashboard(){
-  const k=$('#inventoryKpis'),stock=$('#stockSummary'),sum=$('#inventorySummary');
-  if(k)k.innerHTML=[
-    ['Tablet Stock',Math.max(0,inventoryStock('Swarnabrahma Yog Tablet'))+' tabs'],
-    ['Ghee Stock',Math.max(0,inventoryStock('Cow Ghee'))+' g/ml'],
-    ['Honey Stock',Math.max(0,inventoryStock('Honey'))+' g/ml'],
-    ['Spoons',Math.max(0,inventoryStock('Feeding Spoon'))+' pcs'],
-    ['Purchase Value',money(inventoryPurchaseValue())],
-    ['Free/Family Tablet Use',inventoryUsageCount('Family / Relative Free','Swarnabrahma Yog Tablet')+' tabs']
-  ].map(x=>`<div class="inventory-kpi"><span>${x[0]}</span><b>${x[1]}</b></div>`).join('');
-  if(stock)stock.innerHTML=INVENTORY_ITEMS.slice(0,4).map(i=>`<div class="stock-row"><b>${i}</b><span>${Math.max(0,inventoryStock(i)).toLocaleString('en-IN')} ${inventoryUnitLabel(i)}</span></div>`).join('');
-  if(sum){
-    const acts=['Purchase','Clinic Use','Home Use / Sale','Self Use','Family / Relative Free','Wastage / Damage'];
-    sum.innerHTML=acts.map(a=>`<div class="stock-row"><b>${a}</b><span>${inventoryEntries().filter(e=>e.action===a).length} entries</span></div>`).join('');
-  }
-  drawInventoryLedger();
-}
-function inventoryUnitOptions(item){
-  if(item==='Swarnabrahma Yog Tablet')return ['Tablet','Strip (30 tablets)','Box (150 tablets)'];
-  if(['Cow Ghee','Honey'].includes(item))return ['g','ml','kg','L','Pack'];
-  if(item==='Feeding Spoon')return ['Piece','Pack'];
-  return ['Unit','Pack'];
-}
-function openInventoryEditor(action='Purchase'){
-  const el=$('#inventoryEditor');if(!el)return;
-  el.innerHTML=`<div class="card inventory-editor-card"><div class="cardhead"><div><span class="eyebrow">STOCK TRANSACTION</span><h3>${esc(action)}</h3></div><button class="ghost" onclick="document.getElementById('inventoryEditor').innerHTML=''">Close</button></div>
-  <div class="formgrid inventory-formgrid">
-    <label>Date<input id="inv_date" type="date" value="${isoToday()}"></label>
-    <label>Item<select id="inv_item">${INVENTORY_ITEMS.map(i=>`<option>${i}</option>`).join('')}</select></label>
-    <label>Action<select id="inv_action">${INVENTORY_ACTIONS.map(a=>`<option ${a===action?'selected':''}>${a}</option>`).join('')}</select></label>
-    <label>Quantity<input id="inv_qty" type="number" min="0" step="0.01" value="1"></label>
-    <label>Unit<select id="inv_unit"></select></label>
-    <label>Pack / Brand / Batch<input id="inv_batch" placeholder="Brand, batch, pack size"></label>
-    <label>MRP per strip/pack ₹<input id="inv_mrp" type="number" min="0" step="0.01"></label>
-    <label>Purchase price per strip/pack ₹<input id="inv_purchasePrice" type="number" min="0" step="0.01"></label>
-    <label>Total Purchase Cost ₹<input id="inv_totalCost" type="number" min="0" step="0.01"></label>
-    <label>Purchased From / Vendor<input id="inv_vendor" placeholder="Supplier / pharmacy / company"></label>
-    <label>Paid By<select id="inv_paidBy"><option>Cash</option><option>UPI</option><option>Card</option><option>Bank Transfer</option><option>Credit / Udhari</option><option>Other</option></select></label>
-    <label>Handled By<select id="inv_handledBy">${staffOptions(currentSession()?.name||'Dr Rajesh Sao')}</select></label>
-    <label class="wide">Purpose / Recipient / Note<input id="inv_note" placeholder="e.g. clinic use, Dr Rajesh self use, family free, home-use sale"></label>
-  </div>
-  <div class="inventory-pack-hint" id="inv_hint"></div>
-  <div class="actionrow"><button id="saveInventoryBtn">Save Stock Transaction</button></div></div>`;
-  const syncUnits=()=>{const item=$('#inv_item').value;$('#inv_unit').innerHTML=inventoryUnitOptions(item).map(u=>`<option>${u}</option>`).join('');$('#inv_hint').textContent=item==='Swarnabrahma Yog Tablet'?'1 strip = 30 tablets • 1 box = 5 strips = 150 tablets':(['Cow Ghee','Honey'].includes(item)?'Record quantity as g/ml, kg/L or pack size; mention exact pack size in Brand/Batch field.':'Record actual purchase/use quantity.')};
-  $('#inv_item').onchange=syncUnits;syncUnits();
-  $('#saveInventoryBtn').onclick=saveInventoryEntry;
-  el.scrollIntoView({behavior:'smooth',block:'start'});
-}
-function saveInventoryEntry(){
-  const e={
-    id:uid(),date:$('#inv_date').value||isoToday(),item:$('#inv_item').value,action:$('#inv_action').value,
-    qty:Number($('#inv_qty').value)||0,unit:$('#inv_unit').value,batch:$('#inv_batch').value||'',
-    mrp:Number($('#inv_mrp').value)||0,purchasePrice:Number($('#inv_purchasePrice').value)||0,totalCost:Number($('#inv_totalCost').value)||0,
-    vendor:$('#inv_vendor').value||'',paidBy:$('#inv_paidBy').value,handledBy:$('#inv_handledBy').value,
-    note:$('#inv_note').value||'',createdAt:new Date().toISOString()
-  };
-  if(!e.qty){alert('Please enter quantity.');return}
-  db.inventory=db.inventory||[];db.inventory.push(e);save();
-  $('#inventoryEditor').innerHTML='';drawInventoryDashboard();
-  alert('Inventory transaction saved.');
-}
-function drawInventoryLedger(){
-  const el=$('#inventoryLedger');if(!el)return;
-  const f=$('#inventoryFilter')?.value||'';
-  const rows=inventoryEntries().filter(e=>!f||e.item===f).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
-  el.innerHTML=rows.length?`<div class="inventory-ledger-table"><div class="inventory-ledger-head"><span>Date</span><span>Item</span><span>Action</span><span>Qty</span><span>MRP / Purchase</span><span>Vendor / Paid</span><span>Handled By</span><span>Note</span></div>
-  ${rows.map(e=>`<div class="inventory-ledger-row"><span>${fmt(e.date)}</span><b>${esc(e.item)}</b><span class="inventory-action ${e.action==='Purchase'?'in':'out'}">${esc(e.action)}</span><span>${e.qty} ${esc(e.unit)}</span><span>${e.mrp?money(e.mrp):'-'} / ${e.purchasePrice?money(e.purchasePrice):'-'}${e.totalCost?`<small>Total ${money(e.totalCost)}</small>`:''}</span><span>${esc(e.vendor||'-')}<small>${esc(e.paidBy||'')}</small></span><span>${esc(e.handledBy||'-')}</span><span>${esc(e.note||'-')}</span></div>`).join('')}</div>`:'<p class="muted">No inventory entries yet.</p>';
-}
-
-// Backup / Settings
-function renderBackup(){$('#backupBtn').onclick=()=>download('swarnaprashan-v7-backup-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(db,null,2),'application/json');$('#restoreInput').onchange=async e=>{try{db=JSON.parse(await e.target.files[0].text());db.settings={...defaults,...(db.settings||{})};save();alert('Restored');showView('dashboard')}catch{alert('Invalid backup')}};$('#csvBtn').onclick=exportCSV}
-function exportCSV(){const head=['Child','RegID','Date','Dose','Height','Weight','BMI','Pulse','RR','SpO2','BP','Issue',...scales],rows=db.followups.map(f=>{const c=child(f.childId)||{};return[c.name,c.regId,f.date,f.dose,f.height,f.weight,f.bmi,f.pulse,f.rr,f.spo2,f.bp,f.issue,...scales.map(k=>f.scores?.[k])]});download('swarnaprashan-followups.csv',[head,...rows].map(r=>r.map(x=>`"${String(x??'').replaceAll('"','""')}"`).join(',')).join('\n'),'text/csv')}
-function download(n,t,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type}));a.download=n;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500)}
-function renderSettings(){
-  setTimeout(()=>{const e=$('#s_swarnaprashanRate');if(e)e.value=currentSwarnaprashanRate()},0);
- $('#settingsForm').innerHTML=`<div class="section"><h4>Prescription Letterhead</h4><div class="formgrid">
- <label>Clinic Name<input id="s_clinic" value="${esc(db.settings.clinicName)}"></label>
- <label>Swarnaprashan Rate / Dose ₹<input id="s_swarnaprashanRate" type="number" min="0" step="1" value="${currentSwarnaprashanRate()}"></label>
- <label>Swarnaprashan / Payment Staff Names<input id="s_salesStaff" value="${esc(salesStaffList().join(', '))}" placeholder="Comma separated names"></label>
- <label>Prescription Title<input id="s_rxTitle" value="${esc(db.settings.prescriptionTitle||'Swarnaprashan Digital Prescription')}"></label>
- <label>Phone<input id="s_phone" value="${esc(db.settings.phone)}"></label>
- </div></div>
- <div class="section"><h4>Doctor 1</h4><div class="formgrid">
- <label>Name & Degree<input id="s_doctor" value="${esc(db.settings.doctor)}"></label>
- <label>Designation<input id="s_desig" value="${esc(db.settings.designation)}"></label>
- </div></div>
- <div class="section"><h4>Doctor 2</h4><div class="formgrid">
- <label>Name & Degree<input id="s_doctor2" value="${esc(db.settings.doctor2||'Dr. Ravi Chandrakar, B.A.M.S.')}"></label>
- <label>Designation<input id="s_desig2" value="${esc(db.settings.designation2||'Consultant Physician • Ayurveda')}"></label>
- </div></div>
- <div class="section"><h4>Clinic Address & Footer</h4>
- <label>Address<input id="s_address" value="${esc(db.settings.address)}"></label>
- <label>Report Footer<textarea id="s_footer">${esc(db.settings.footer)}</textarea></label></div>
- <div class="actionrow"><button id="saveSettings">Save Letterhead Settings</button></div>
- <div class="section"><h4>Multi Login User Management</h4><p class="muted">Create multiple users. Login is possible via login ID, mobile number or email. Recovery email is used by the local forgot-password workflow.</p>
- <input id="u_id" type="hidden">
- <div class="formgrid">
- <label>Full Name<input id="u_name" placeholder="User full name"></label>
- <label>Role<select id="u_role"><option>Super Admin</option><option>Doctor</option><option>Assistant</option><option>Reception</option></select></label>
- <label>Login ID<input id="u_login" placeholder="Unique login ID"></label>
- <label>Mobile<input id="u_mobile" placeholder="Optional unique mobile"></label>
- <label>Email<input id="u_email" placeholder="Optional login email"></label>
- <label>Password<input id="u_password" type="password" placeholder="Create password"></label>
- <label>Recovery Email<input id="u_recovery" placeholder="Gmail / recovery email"></label>
- </div>
- <div class="actionrow"><button id="saveUserBtn">Save User</button></div>
- <div id="usersList"></div></div>`;
- $('#saveSettings').onclick=()=>{
-   db.settings={...db.settings,
-      clinicName:$('#s_clinic').value,
-      swarnaprashanRate:Number($('#s_swarnaprashanRate').value)||250,
-      salesStaff:($('#s_salesStaff')?.value||'').split(',').map(x=>x.trim()).filter(Boolean),
-      prescriptionTitle:$('#s_rxTitle').value,
-      doctor:$('#s_doctor').value,
-      designation:$('#s_desig').value,
-      doctor2:$('#s_doctor2').value,
-      designation2:$('#s_desig2').value,
-      phone:$('#s_phone').value,
-      address:$('#s_address').value,
-      footer:$('#s_footer').value
-    };
-   save();alert('Letterhead and clinic settings saved');
- };
- $('#saveUserBtn').onclick=saveUserFromSettings;
- $('#usersList').innerHTML=usersHtml();
-}
-
-function printHtmlContent(html, title='Mahamaya Clinic Swarnaprashan'){
-  if(!html || !html.trim()){
-    alert('Please generate the prescription/report first.');
-    return;
-  }
-  const w=window.open('','_blank','width=1000,height=800');
-  if(!w){alert('Pop-up blocked. Please allow pop-ups for this site and try again.');return}
-  const printCss=`
-    @page{size:A4 portrait;margin:12mm}
-    *{box-sizing:border-box}
-    body{font-family:Arial,Segoe UI,sans-serif;color:#172033;margin:0;background:#fff;font-size:12px;line-height:1.45}
-    .reportpaper{padding:0;margin:0;border:0;box-shadow:none}
-    .letterhead{border-bottom:2px solid #c79a45;padding-bottom:10px;margin-bottom:14px}
-    .letterhead-top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
-    .clinic-identity{display:flex;gap:12px;align-items:center}
-    .letter-logo{width:48px;height:48px;border-radius:12px;background:#6a431c;color:#fff;display:grid;place-items:center;font-size:23px;font-weight:900}
-    .clinic-name{font-size:24px;font-weight:900;color:#6a431c}
-    .rx-title{font-size:15px;font-weight:800;margin-top:3px}
-    .letter-date{text-align:right;font-size:11px}
-    .doctor-strip{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:9px}
-    .doctor-card{padding:8px 10px;border:1px solid #e8dfd1;border-radius:9px}
-    .doctor-card b{display:block;font-size:12px}
-    .doctor-card span{display:block;font-size:10px;color:#666;margin-top:2px}
-    .clinic-address{font-size:10px;font-weight:700;color:#5f5f5f;margin-top:7px}
-    .avatar-lg{width:82px;height:82px;object-fit:cover;border-radius:12px;border:1px solid #ddd}
-    .patient-head-id{font-weight:800;margin-top:3px}
-    .reportsection{margin:14px 0;break-inside:avoid}
-    .reportsection h3{font-size:14px;color:#6a431c;border-bottom:1px solid #e6e0d8;padding-bottom:5px;margin:0 0 8px}
-    .metricrow{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
-    .metric{border:1px solid #e5e0d8;border-radius:8px;padding:8px}
-    .metric span{display:block;font-size:9px;color:#777}
-    .metric b{display:block;font-size:14px;margin-top:2px}
-    table{width:100%;border-collapse:collapse}
-    th,td{border-bottom:1px solid #e8e8e8;padding:6px;text-align:left;font-size:10px}
-    th{background:#faf7f2}
-    .good{color:#2d7755;font-weight:700}.bad{color:#b14f4f;font-weight:700}.stable{color:#3f6d9c;font-weight:700}
-    .signature{margin-top:22px;border-top:1px solid #ddd;padding-top:9px}
-    .signature-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
-    .signature-grid span,.signature-address{font-size:9px;color:#666}
-    ul{margin:5px 0 5px 18px;padding:0}
-  `;
-  w.document.open();
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${printCss}</style></head><body><div class="reportpaper">${html}</div><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
-  w.document.close();
-}
-function printCaseReport(){
-  const el=$('#caseReportPreview');
-  if(!el || !el.innerHTML.trim()){alert('Please generate the prescription first.');return}
-  printHtmlContent(el.innerHTML,'Mahamaya Clinic - Swarnaprashan Digital Prescription');
-}
-function printParentReport(){
-  const el=$('#reportPaper');
-  if(!el || !el.innerHTML.trim()){alert('Please generate the report first.');return}
-  printHtmlContent(el.innerHTML,'Mahamaya Clinic - Swarnaprashan Progress Report');
-}
-
-
-function normalizeCloudDb(incoming){
-  incoming=incoming||{};
-  return {
-    children:(incoming.children||[]).map(normalizeChild),
-    cases:incoming.cases||[],
-    followups:incoming.followups||[],
-    vaccines:incoming.vaccines||[],
-    plans:incoming.plans||[],
-    payments:incoming.payments||[],
-    inventory:incoming.inventory||[],
-    settings:{...defaults,...(incoming.settings||{})}
+    db.bills.push(b); save(`Bill ${b.id} created for ${b.patient}`); closeModal();render();toast('Bill saved');
   };
 }
-function getCloudSnapshot(){
-  return JSON.parse(JSON.stringify(db));
+function incomeModal(){
+  modal('Add Income',`<div class="form-grid">
+    <label>Date<input id="iDate" type="date" value="${today()}"></label>
+    <label>Source<input id="iSource" placeholder="Camp / training / donation / other"></label>
+    <label>Category<select id="iCategory"><option>Professional Income</option><option>Donation</option><option>Camp/Sponsorship</option><option>Medical Certificate</option><option>Other Income</option></select></label>
+    <label>Amount<input id="iAmount" type="number"></label>
+    <label>Mode<select id="iMode"><option>Cash</option><option>UPI</option><option>Card</option><option>Bank</option><option>Other</option></select></label>
+    <label>Handled By<input id="iBy"></label>
+    <label class="full">Notes<textarea id="iNotes"></textarea></label>
+    <div class="full"><button class="primary" id="saveIncomeBtn">Save Income</button></div>
+  </div>`);
+  $('#saveIncomeBtn').onclick=()=>{const x={id:uid('INC'),date:$('#iDate').value,source:$('#iSource').value,category:$('#iCategory').value,amount:Number($('#iAmount').value||0),mode:$('#iMode').value,handledBy:$('#iBy').value,notes:$('#iNotes').value};db.incomes.push(x);save(`Income ${x.id} added`);closeModal();render();toast('Income saved')};
 }
-function applyCloudSnapshot(incoming){
-  if(!incoming || typeof incoming!=='object') return false;
-  suppressCloudEvent=true;
+function expenseModal(){
+  const cats=['Medicine Purchase - Ayurveda','Medicine Purchase - Allopathic','Procedure Consumables','Panchakarma Materials','Staff Salary','Electricity','Water','Newspaper','Cleaning','Printing/Stationery','Repair & Maintenance','AMC/Calibration','Furniture/Interior','Painting/Wallpaper/Civil Work','Rent','Internet/Phone','Camp Expense','Donation','Equipment Purchase','Other'];
+  modal('Add Expense',`<div class="form-grid">
+    <label>Date<input id="eDate" type="date" value="${today()}"></label>
+    <label>Expense<input id="eName" placeholder="Electricity bill / medicine purchase"></label>
+    <label>Category<select id="eCat">${cats.map(c=>`<option>${c}</option>`).join('')}</select></label>
+    <label>Amount<input id="eAmount" type="number"></label>
+    <label>Mode<select id="eMode"><option>Cash</option><option>UPI</option><option>Card</option><option>Bank</option><option>Credit/Udhari</option><option>Advance</option></select></label>
+    <label>Paid To<input id="eTo" placeholder="Vendor / person"></label>
+    <label>Handled By<input id="eBy"></label>
+    <label>Payment Status<select id="eStatus"><option>Paid</option><option>Part Paid</option><option>Pending</option></select></label>
+    <label class="full">Notes<textarea id="eNotes"></textarea></label>
+    <div class="full"><button class="primary" id="saveExpenseBtn">Save Expense</button></div>
+  </div>`);
+  $('#saveExpenseBtn').onclick=()=>{const x={id:uid('EXP'),date:$('#eDate').value,name:$('#eName').value,category:$('#eCat').value,amount:Number($('#eAmount').value||0),mode:$('#eMode').value,paidTo:$('#eTo').value,handledBy:$('#eBy').value,status:$('#eStatus').value,notes:$('#eNotes').value};db.expenses.push(x);save(`Expense ${x.id} added`);closeModal();render();toast('Expense saved')};
+}
+function inventoryModal(){
+  modal('Add Inventory Item',`<div class="form-grid">
+    <label>Segment<select id="vSegment">${invTabs.map(x=>`<option ${x===inventoryTab?'selected':''}>${x}</option>`).join('')}</select></label>
+    <label>Item Name<input id="vName"></label>
+    <label>Generic / Type<input id="vGeneric"></label>
+    <label>Brand / Manufacturer<input id="vBrand"></label>
+    <label>Qty<input id="vQty" type="number" value="0"></label>
+    <label>Reorder Level<input id="vReorder" type="number" value="0"></label>
+    <label>Purchase Rate<input id="vPurchase" type="number" value="0"></label>
+    <label>MRP / Selling Rate<input id="vSale" type="number" value="0"></label>
+    <label>Vendor<input id="vVendor"></label>
+    <label>Batch<input id="vBatch"></label>
+    <label>Expiry<input id="vExpiry" type="month"></label>
+    <label>Location<input id="vLocation" placeholder="Store / OPD / Panchakarma"></label>
+    <div class="full"><button class="primary" id="saveInventoryBtn">Save Stock Item</button></div>
+  </div>`);
+  $('#saveInventoryBtn').onclick=()=>{const x={id:uid('STK'),segment:$('#vSegment').value,name:$('#vName').value,generic:$('#vGeneric').value,brand:$('#vBrand').value,qty:Number($('#vQty').value||0),reorderLevel:Number($('#vReorder').value||0),purchaseRate:Number($('#vPurchase').value||0),saleRate:Number($('#vSale').value||0),vendor:$('#vVendor').value,batch:$('#vBatch').value,expiry:$('#vExpiry').value,location:$('#vLocation').value};db.inventory.push(x);inventoryTab=x.segment;save(`Inventory item ${x.name} added`);closeModal();currentView='inventory';render();toast('Stock item saved')};
+}
+function vendorModal(){
+  const types=['Ayurvedic Supplier','Allopathic Supplier','Both Medicines','Procedure Consumables','Panchakarma Supplier','Printing Vendor','Equipment Vendor','Repair Technician','Furniture/Interior Vendor','Other'];
+  modal('Add Vendor / Party',`<div class="form-grid">
+    <label>Party Name<input id="vdName"></label>
+    <label>Type<select id="vdType">${types.map(x=>`<option>${x}</option>`).join('')}</select></label>
+    <label>Owner / Contact Person<input id="vdOwner"></label>
+    <label>Sales / Delivery Person<input id="vdSales"></label>
+    <label>Phone<input id="vdPhone"></label>
+    <label>Address<input id="vdAddress"></label>
+    <label>UPI ID<input id="vdUpi"></label>
+    <label>Credit Days<input id="vdCredit" type="number" value="0"></label>
+    <label>Total Purchase<input id="vdPurchase" type="number" value="0"></label>
+    <label>Paid<input id="vdPaid" type="number" value="0"></label>
+    <div class="full"><button class="primary" id="saveVendorBtn">Save Vendor</button></div>
+  </div>`);
+  $('#saveVendorBtn').onclick=()=>{const total=Number($('#vdPurchase').value||0),paid=Number($('#vdPaid').value||0);const x={id:uid('VEN'),name:$('#vdName').value,type:$('#vdType').value,owner:$('#vdOwner').value,sales:$('#vdSales').value,phone:$('#vdPhone').value,address:$('#vdAddress').value,upi:$('#vdUpi').value,creditDays:Number($('#vdCredit').value||0),totalPurchase:total,paid,outstanding:Math.max(0,total-paid)};db.vendors.push(x);save(`Vendor ${x.name} added`);closeModal();render();toast('Vendor saved')};
+}
+function staffModal(){
+  const roles=['Doctor','Visiting Doctor','Nursing Staff','Dresser','Receptionist','Pharmacy Staff','Panchakarma Therapist','Aaya / Patient Care','Cleaning / Housekeeping','Accountant / Billing','Helper / Attendant','Other'];
+  modal('Add Staff',`<div class="form-grid">
+    <label>Name<input id="stName"></label>
+    <label>Role<select id="stRole">${roles.map(x=>`<option>${x}</option>`).join('')}</select></label>
+    <label>Phone<input id="stPhone"></label>
+    <label>Joining Date<input id="stJoin" type="date" value="${today()}"></label>
+    <label>Salary Type<select id="stType"><option>Monthly Fixed</option><option>Daily Wage</option><option>Per Shift</option><option>Per Visit</option><option>Per Procedure</option><option>Honorarium</option></select></label>
+    <label>Rate / Salary<input id="stSalary" type="number" value="0"></label>
+    <label>Advance<input id="stAdvance" type="number" value="0"></label>
+    <label>Paid This Month<input id="stPaid" type="number" value="0"></label>
+    <label class="full">Address / Notes<textarea id="stNotes"></textarea></label>
+    <div class="full"><button class="primary" id="saveStaffBtn">Save Staff</button></div>
+  </div>`);
+  $('#saveStaffBtn').onclick=()=>{const x={id:uid('STF'),name:$('#stName').value,role:$('#stRole').value,phone:$('#stPhone').value,joining:$('#stJoin').value,salaryType:$('#stType').value,salary:Number($('#stSalary').value||0),advance:Number($('#stAdvance').value||0),paid:Number($('#stPaid').value||0),notes:$('#stNotes').value};db.staff.push(x);save(`Staff ${x.name} added`);closeModal();render();toast('Staff saved')};
+}
+function swarnaModal(){
+  modal('Add Swarnaprashan Entry',`<div class="form-grid">
+    <label>Date<input id="swDate" type="date" value="${today()}"></label>
+    <label>Child / Event<input id="swChild" placeholder="Child name or Pushya event"></label>
+    <label>Clinic Dose Qty<input id="swClinic" type="number" value="1"></label>
+    <label>Home Use Qty<input id="swHome" type="number" value="0"></label>
+    <label>Billing<input id="swBill" type="number" value="250"></label>
+    <label>Received<input id="swReceived" type="number" value="250"></label>
+    <label>Mode<select id="swMode"><option>Cash</option><option>UPI</option><option>Card</option><option>Bank</option><option>Credit/Udhari</option><option>Complimentary</option></select></label>
+    <label>Administered By<input id="swAdmin"></label>
+    <label>Payment By<input id="swPay"></label>
+    <label>Material Cost<input id="swCost" type="number" value="0"></label>
+    <div class="full"><button class="primary" id="saveSwarnaBtn">Save Entry</button></div>
+  </div>`);
+  $('#saveSwarnaBtn').onclick=()=>{const x={id:uid('SW'),date:$('#swDate').value,child:$('#swChild').value,clinicDose:Number($('#swClinic').value||0),homeUse:Number($('#swHome').value||0),billed:Number($('#swBill').value||0),received:Number($('#swReceived').value||0),mode:$('#swMode').value,administeredBy:$('#swAdmin').value,paymentBy:$('#swPay').value,materialCost:Number($('#swCost').value||0)};db.swarnaprashan.push(x);save(`Swarnaprashan entry ${x.id} added`);closeModal();render();toast('Swarnaprashan entry saved')};
+}
+function campModal(){
+  modal('Add Camp / Seva Event',`<div class="form-grid">
+    <label>Date<input id="cpDate" type="date" value="${today()}"></label>
+    <label>Camp Name<input id="cpName"></label>
+    <label>Type<select id="cpType"><option>Free Medical Camp</option><option>Sponsored Camp</option><option>Partially Paid Camp</option><option>Paid Camp</option></select></label>
+    <label>Location<input id="cpLocation"></label>
+    <label>Patients Seen<input id="cpPatients" type="number" value="0"></label>
+    <label>Total Expense<input id="cpExpense" type="number" value="0"></label>
+    <label>Donation / Sponsor Support<input id="cpSupport" type="number" value="0"></label>
+    <label>Free Medicine Value<input id="cpMed" type="number" value="0"></label>
+    <label class="full">Notes<textarea id="cpNotes" placeholder="Transport, printing, food, staff, medicines, procedures..."></textarea></label>
+    <div class="full"><button class="primary" id="saveCampBtn">Save Camp</button></div>
+  </div>`);
+  $('#saveCampBtn').onclick=()=>{const x={id:uid('CAMP'),date:$('#cpDate').value,name:$('#cpName').value,type:$('#cpType').value,location:$('#cpLocation').value,patients:Number($('#cpPatients').value||0),expense:Number($('#cpExpense').value||0),support:Number($('#cpSupport').value||0),freeMedicineValue:Number($('#cpMed').value||0),notes:$('#cpNotes').value};db.camps.push(x);save(`Camp ${x.name} added`);closeModal();render();toast('Camp saved')};
+}
+function assetModal(){
+  const seg=['Ayurvedic Clinical Equipment','Modern/Allopathic Clinical Equipment','Reusable Instruments','IT & Electronics','Furniture & Fixtures','Interior / Decorative','Signage / Branding Asset','Electrical / Utility Asset','Other'];
+  modal('Add Asset / Equipment',`<div class="form-grid">
+    <label>Asset Name<input id="asName"></label>
+    <label>Segment<select id="asSeg">${seg.map(x=>`<option>${x}</option>`).join('')}</select></label>
+    <label>Brand / Model<input id="asBrand"></label>
+    <label>Serial / Asset ID<input id="asSerial"></label>
+    <label>Purchase Date<input id="asDate" type="date" value="${today()}"></label>
+    <label>Purchase Cost<input id="asCost" type="number" value="0"></label>
+    <label>Vendor<input id="asVendor"></label>
+    <label>Location<input id="asLocation" placeholder="OPD / Panchakarma / Procedure Room"></label>
+    <label>Status<select id="asStatus"><option>Active</option><option>Backup</option><option>Under Repair</option><option>Maintenance Due</option><option>Condemned</option></select></label>
+    <label>Next Service<input id="asService" type="date"></label>
+    <div class="full"><button class="primary" id="saveAssetBtn">Save Asset</button></div>
+  </div>`);
+  $('#saveAssetBtn').onclick=()=>{const x={id:uid('AST'),name:$('#asName').value,segment:$('#asSeg').value,brand:$('#asBrand').value,serial:$('#asSerial').value,purchaseDate:$('#asDate').value,cost:Number($('#asCost').value||0),vendor:$('#asVendor').value,location:$('#asLocation').value,status:$('#asStatus').value,nextService:$('#asService').value};db.assets.push(x);save(`Asset ${x.name} added`);closeModal();render();toast('Asset saved')};
+}
+function maintenanceModal(){
+  const cats=['Clinical Equipment Repair','Ayurveda Equipment Repair','IT Repair','Electrical Maintenance','Plumbing / Water','Furniture Repair','Painting / Wall / Wallpaper','Civil Work','Signage / Branding Repair','AMC','Calibration','Interior Repair','Other'];
+  modal('Add Repair / Maintenance',`<div class="form-grid">
+    <label>Date<input id="mtDate" type="date" value="${today()}"></label>
+    <label>Asset / Work<input id="mtAsset" placeholder="Autoclave / wall painting / AC"></label>
+    <label>Category<select id="mtCat">${cats.map(x=>`<option>${x}</option>`).join('')}</select></label>
+    <label>Vendor / Technician<input id="mtVendor"></label>
+    <label>Cost<input id="mtCost" type="number" value="0"></label>
+    <label>Status<select id="mtStatus"><option>Completed</option><option>Due</option><option>Overdue</option><option>Under Repair</option></select></label>
+    <label>Next Due<input id="mtDue" type="date"></label>
+    <label>Paid / Pending<select id="mtPay"><option>Paid</option><option>Part Paid</option><option>Pending</option></select></label>
+    <label class="full">Problem / Work Done<textarea id="mtNotes"></textarea></label>
+    <div class="full"><button class="primary" id="saveMaintenanceBtn">Save Maintenance</button></div>
+  </div>`);
+  $('#saveMaintenanceBtn').onclick=()=>{const x={id:uid('MNT'),date:$('#mtDate').value,asset:$('#mtAsset').value,category:$('#mtCat').value,vendor:$('#mtVendor').value,cost:Number($('#mtCost').value||0),status:$('#mtStatus').value,nextDue:$('#mtDue').value,paymentStatus:$('#mtPay').value,notes:$('#mtNotes').value};db.maintenance.push(x);save(`Maintenance ${x.asset} added`);closeModal();render();toast('Maintenance saved')};
+}
+
+function reminderModal(prefill={}){
+  const linked=Object.entries(pageMeta).map(([k,v])=>`<option value="${k}" ${String(prefill.linkedView||currentView)===k?'selected':''}>${esc(v[0])}</option>`).join('');
+  modal('Add Reminder',`<div class="form-grid">
+    <label>Reminder Title<input id="rTitle" value="${esc(prefill.title||'')}" placeholder="Vendor payment / stock reorder / salary / follow-up"></label>
+    <label>Category<select id="rCategory"><option ${prefill.category==='Payment'?'selected':''}>Payment</option><option ${prefill.category==='Stock'?'selected':''}>Stock</option><option ${prefill.category==='Maintenance'?'selected':''}>Maintenance</option><option ${prefill.category==='Staff'?'selected':''}>Staff</option><option ${prefill.category==='Swarnaprashan'?'selected':''}>Swarnaprashan</option><option ${prefill.category==='Camp'?'selected':''}>Camp</option><option ${prefill.category==='Personal'?'selected':''}>Personal</option><option ${!prefill.category||prefill.category==='General'?'selected':''}>General</option></select></label>
+    <label>Due Date<input id="rDueDate" type="date" value="${esc(prefill.dueDate||today())}"></label>
+    <label>Priority<select id="rPriority"><option ${prefill.priority==='High'?'selected':''}>High</option><option ${!prefill.priority||prefill.priority==='Medium'?'selected':''}>Medium</option><option ${prefill.priority==='Low'?'selected':''}>Low</option></select></label>
+    <label>Open With Page<select id="rLinked">${linked}</select></label>
+    <label>Status<select id="rStatus"><option>Open</option><option>Planned</option></select></label>
+    <label class="full">Notes<textarea id="rNote" placeholder="What exactly should be remembered? amount, contact, follow-up, stock name etc.">${esc(prefill.note||'')}</textarea></label>
+    <div class="full"><button class="primary" id="saveReminderBtn">Save Reminder</button></div>
+  </div>`,'Create reminders for finance, stock, maintenance, salary, seva, follow-up or any important clinic work.');
+  $('#saveReminderBtn').onclick=()=>{
+    const x={id:uid('REM'),title:$('#rTitle').value||'Reminder',category:$('#rCategory').value,dueDate:$('#rDueDate').value,priority:$('#rPriority').value,linkedView:$('#rLinked').value,status:$('#rStatus').value,note:$('#rNote').value,done:false,createdAt:nowISO()};
+    db.reminders=(db.reminders||[]);
+    db.reminders.push(x);
+    save(`Reminder ${x.title} added`);
+    closeModal();render();toast('Reminder saved');
+  };
+}
+
+function bindModalActions(){
+  $$('[data-action]').forEach(b=>b.onclick=()=>action(b.dataset.action));
+}
+function action(a){
+  const map={bill:billModal,income:incomeModal,expense:expenseModal,inventory:inventoryModal,vendor:vendorModal,staff:staffModal,swarnaprashan:swarnaModal,camp:campModal,asset:assetModal,maintenance:maintenanceModal,reminder:()=>reminderModal({linkedView:currentView,category: currentView==='expenses'||currentView==='vendors'?'Payment':currentView==='inventory'?'Stock':currentView==='assets'?'Maintenance':currentView==='staff'?'Staff':currentView==='swarnaprashan'?'Swarnaprashan':currentView==='camps'?'Camp':'General'})};
+  if(map[a]){closeModal();map[a]()}
+}
+function bindView(){
+  $$('[data-action]').forEach(b=>b.onclick=()=>action(b.dataset.action));
+  $$('[data-viewjump]').forEach(b=>b.onclick=()=>{currentView=b.dataset.viewjump;render()});
+  $('[data-invtab]').forEach(b=>b.onclick=()=>{inventoryTab=b.dataset.invtab;render()});
+  $('[data-remdone]').forEach(b=>b.onclick=()=>{const id=b.dataset.remdone; const r=(db.reminders||[]).find(x=>x.id===id); if(r){r.done=true;r.doneAt=nowISO();save(`Reminder ${r.title} completed`);render();toast('Reminder marked done')}});
+  $('[data-remdelete]').forEach(b=>b.onclick=()=>{const id=b.dataset.remdelete; const r=(db.reminders||[]).find(x=>x.id===id); if(confirm('Delete this reminder?')){db.reminders=(db.reminders||[]).filter(x=>x.id!==id);save(`Reminder ${r?.title||id} deleted`);render();toast('Reminder deleted')}});
+  $$('[data-stmtdays]').forEach(b=>b.onclick=()=>{
+    statementPresetDays=Number(b.dataset.stmtdays||30);
+    const to=today(),from=dateShift(-(statementPresetDays-1));
+    $('#stmtFrom').value=from;$('#stmtTo').value=to;
+    $$('[data-stmtdays]').forEach(x=>x.classList.toggle('active',x===b));
+    refreshStatement();
+  });
+  if($('#stmtGenerateBtn')) $('#stmtGenerateBtn').onclick=refreshStatement;
+  if($('#stmtPrintBtn')) $('#stmtPrintBtn').onclick=printStatement;
+  if($('#stmtCsvBtn')) $('#stmtCsvBtn').onclick=downloadStatementCSV;
+  if($('#stmtShareBtn')) $('#stmtShareBtn').onclick=shareStatement;
+  if($('#closeDayBtn')) $('#closeDayBtn').onclick=closeDay;
+  if($('#saveSettingsBtn')) $('#saveSettingsBtn').onclick=()=>{db.settings.clinicName=$('#setClinicName').value;db.settings.owner=$('#setOwner').value;db.settings.consultationRate=Number($('#setConsult').value||0);db.settings.followupRate=Number($('#setFollow').value||0);save('Clinic settings updated');render();toast('Settings saved')};
+  if($('#settingsBackupBtn')) $('#settingsBackupBtn').onclick=backup;
+  if($('#restoreBtn')) $('#restoreBtn').onclick=restorePrompt;
+  if($('#resetBtn')) $('#resetBtn').onclick=()=>{if(confirm('Reset ALL local app data? This cannot be undone without a backup.')){db=structuredClone(seed);save('Local data reset');render();toast('Local data reset')}};
+}
+function closeDay(){
+  const opening=Number($('#closeOpening').value||0), actual=Number($('#closeActual').value||0);
+  const bills=todays(db.bills), inc=todays(db.incomes), exp=todays(db.expenses);
+  const cashIn=sum(bills,x=>x.cash)+sum(inc,x=>x.mode==='Cash'?x.amount:0);
+  const cashOut=sum(exp,x=>x.mode==='Cash'?x.amount:0);
+  const expected=opening+cashIn-cashOut, difference=actual-expected;
+  db.closings.push({id:uid('CLS'),date:today(),opening,cashIn,cashOut,expected,actual,difference,notes:$('#closeNotes').value,closedAt:nowISO()});
+  save(`Day ${today()} closed with difference ${difference}`);render();toast('Day closed');
+}
+function backup(){
+  const blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Mahamaya-Clinic-OS-backup-${today()}.json`;a.click();URL.revokeObjectURL(a.href);toast('Backup downloaded');
+}
+function restorePrompt(){
+  const i=document.createElement('input');i.type='file';i.accept='.json,application/json';
+  i.onchange=()=>{const f=i.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.settings||!d.bills)throw new Error('Invalid');db=d;save('Backup restored');render();toast('Backup restored')}catch(e){alert('Invalid backup file')}};r.readAsText(f)};i.click();
+}
+render();
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+
+// V1.3 stable viewport + cloud UI refresh
+function forceViewportLeft(){
   try{
-    db=normalizeCloudDb(incoming);
-    localStorage.setItem(KEY,JSON.stringify(db));
-    try{ showView(currentView||'dashboard'); }catch(e){ console.warn('Cloud render refresh',e); }
-  } finally {
-    setTimeout(()=>{suppressCloudEvent=false},0);
-  }
-  return true;
+    document.documentElement.scrollLeft=0;
+    document.body.scrollLeft=0;
+    if(window.scrollX!==0)window.scrollTo(0,window.scrollY||0);
+  }catch(e){}
 }
-
-function init(){db.children=db.children.map(normalizeChild);save();openIDB().catch(()=>{});bindCameraModal();bindAuth();$$('#nav button').forEach(b=>b.onclick=()=>showView(b.dataset.view));$('#topNewChild').onclick=()=>{showView('children');editChild()};$('#topNewCase').onclick=()=>startClinical();$('#globalSearch').oninput=e=>{const q=e.target.value.trim();if(!q)return;showView('children');if($('#childSearch'))$('#childSearch').value=q;drawChildren(q)};ensureAuthUI()}
-return{init,showView,openDayChildren,openCalendarDate,startClinical,editChild,quickReport,openQuickUpload,openDoc,downloadDoc,removeDoc,generateCaseReport,shareCurrent,whatsappCurrent,printCaseReport,printParentReport,startDirectCamera,prefillUser,deleteUser,resetLoginAccess,openChildDetails,shareChildProfile,deleteChild,openChildrenStatus,openChildFromDashboard,openAlpha,recordPayment,setPaymentPreset,openPaymentReceipt,printPaymentReceipt,whatsappPaymentReceipt,sharePaymentReceipt,showView,openInventoryEditor,getCloudSnapshot,applyCloudSnapshot};
-})();
-window.app=app;
-document.addEventListener('DOMContentLoaded',app.init);
+window.addEventListener('pageshow',()=>setTimeout(forceViewportLeft,0));
+window.addEventListener('resize',()=>setTimeout(forceViewportLeft,0));
+window.addEventListener('orientationchange',()=>setTimeout(forceViewportLeft,120));
+window.addEventListener('mahamaya-cloud-updated',()=>{db=load();render();setTimeout(forceViewportLeft,0)});
+window.addEventListener('mahamaya-cloud-ready',()=>{db=load();render();setTimeout(forceViewportLeft,0)});
+setTimeout(forceViewportLeft,0);
