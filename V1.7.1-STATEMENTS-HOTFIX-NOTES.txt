@@ -1,0 +1,23 @@
+MAHAMAYA CLINIC OS — V1.7.1 STATEMENTS HOTFIX
+Updated 13 Aug 2026
+
+FIXED
+- Quick period buttons: 1 Day, 1 Week, 2 Weeks, 3 Weeks, 1 Month, 2 Months, 3 Months, 6 Months, 9 Months, 1 Year.
+- Generate Statement button binding.
+- Print / Save PDF button binding.
+- CSV export button binding and Excel-friendly UTF-8 BOM.
+- WhatsApp / Share button binding.
+
+ROOT CAUSE
+A JavaScript binding error used a single-element selector for inventory tabs and then called .forEach() on it. On pages without that element, bindView() stopped before the Statements controls were connected. The fix changes it to the multi-element selector so the entire binding routine completes safely.
+
+PRESERVED
+- Firebase login and credentials flow untouched.
+- cloud-sync.js untouched.
+- Firestore rules/config untouched.
+- Local database/storage keys untouched.
+- Existing bills, income, expense, inventory, staff, Swarnaprashan, camps and settings data untouched.
+- V1.7 flexible compassionate billing preserved.
+
+GITHUB COMMIT MESSAGE
+MAHAMAYA CLINIC OS — V1.7.1 — Fix Statements period tabs PDF CSV and WhatsApp Share controls

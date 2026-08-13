@@ -493,7 +493,7 @@ function statement(){
       <h3>Clinic Financial Statement</h3>
       <p class="muted">Bank-statement style view of patient receipts, other income and expenses. Select a period, review the ledger, then print/save PDF or share a summary.</p>
     </div>
-    <div class="statement-version">Mahamaya Clinic OS • V1.6</div>
+    <div class="statement-version">Mahamaya Clinic OS • V1.7.1</div>
   </div>
 
   <div class="card statement-controls">
@@ -563,7 +563,7 @@ Total expenses: ${money(outflow)}
 Net operational: ${money(net)}
 Recorded due: ${money(due)}
 Transactions: ${rows.length}
-Generated from Mahamaya Clinic OS V1.6`;
+Generated from Mahamaya Clinic OS V1.7.1`;
 }
 function shareStatement(){
   const text=statementShareText();
@@ -574,8 +574,10 @@ function csvEscape(v){return `"${String(v??'').replaceAll('"','""')}"`}
 function downloadStatementCSV(){
   const {from,to}=selectedStatementRange(), rows=statementTransactions(from,to);
   const data=[['Date','Type','Reference','Party/Patient','Category','Mode','Received','Expense','Due','Note'],...rows.map(r=>[r.date,r.type,r.ref,r.party,r.category,r.mode,r.inflow,r.outflow,r.due,r.note])];
-  const blob=new Blob([data.map(row=>row.map(csvEscape).join(',')).join('\n')],{type:'text/csv;charset=utf-8'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Mahamaya-Clinic-Statement-${from}-to-${to}.csv`;a.click();URL.revokeObjectURL(a.href);toast('Statement CSV downloaded');
+  const blob=new Blob(['\uFEFF'+data.map(row=>row.map(csvEscape).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`Mahamaya-Clinic-Statement-${from}-to-${to}.csv`;a.style.display='none';document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},1200);toast('Statement CSV downloaded');
 }
 function printStatement(){
   document.body.classList.add('statement-printing');
@@ -957,7 +959,7 @@ function action(a){
 function bindView(){
   $$('[data-action]').forEach(b=>b.onclick=()=>action(b.dataset.action));
   $$('[data-viewjump]').forEach(b=>b.onclick=()=>{currentView=b.dataset.viewjump;render()});
-  $('[data-invtab]').forEach(b=>b.onclick=()=>{inventoryTab=b.dataset.invtab;render()});
+  $$('[data-invtab]').forEach(b=>b.onclick=()=>{inventoryTab=b.dataset.invtab;render()});
   $('[data-remdone]').forEach(b=>b.onclick=()=>{const id=b.dataset.remdone; const r=(db.reminders||[]).find(x=>x.id===id); if(r){r.done=true;r.doneAt=nowISO();save(`Reminder ${r.title} completed`);render();toast('Reminder marked done')}});
   $('[data-remdelete]').forEach(b=>b.onclick=()=>{const id=b.dataset.remdelete; const r=(db.reminders||[]).find(x=>x.id===id); if(confirm('Delete this reminder?')){db.reminders=(db.reminders||[]).filter(x=>x.id!==id);save(`Reminder ${r?.title||id} deleted`);render();toast('Reminder deleted')}});
   $$('[data-stmtdays]').forEach(b=>b.onclick=()=>{
