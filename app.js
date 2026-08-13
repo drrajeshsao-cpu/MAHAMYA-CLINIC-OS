@@ -147,7 +147,12 @@ $('#backupBtn').onclick=backup;
 function render(){
   const [t,s]=pageMeta[currentView]; $('#pageTitle').textContent=t; $('#pageSubtitle').textContent=s;
   const fn=views[currentView]; $('#view').innerHTML=fn?fn():'';
-  bindView();
+  try{ bindView(); }
+  catch(err){
+    console.error('View binding error',err);
+    toast('A control-binding error was contained. Please refresh if a button is unavailable.');
+    bindStatementControls();
+  }
 }
 
 function monthPrefix(){return today().slice(0,7)}
@@ -512,7 +517,7 @@ function statement(){
       </div>
     </div>
   </div>
-  <div id="statementOutput">${statementOutput(from,to)}</div>`;
+  <div class="statement-control-status" id="stmtControlStatus">Controls ready: period • generate • PDF • CSV • share</div><div id="statementOutput">${statementOutput(from,to)}</div>`;
 }
 function statementOutput(from,to){
   const rows=statementTransactions(from,to);
@@ -956,23 +961,33 @@ function action(a){
   const map={bill:billModal,income:incomeModal,expense:expenseModal,inventory:inventoryModal,vendor:vendorModal,staff:staffModal,swarnaprashan:swarnaModal,camp:campModal,asset:assetModal,maintenance:maintenanceModal,reminder:()=>reminderModal({linkedView:currentView,category: currentView==='expenses'||currentView==='vendors'?'Payment':currentView==='inventory'?'Stock':currentView==='assets'?'Maintenance':currentView==='staff'?'Staff':currentView==='swarnaprashan'?'Swarnaprashan':currentView==='camps'?'Camp':'General'})};
   if(map[a]){closeModal();map[a]()}
 }
+
+function bindStatementControls(){
+  $$('[data-stmtdays]').forEach(b=>{
+    b.onclick=()=>{
+      statementPresetDays=Number(b.dataset.stmtdays||30);
+      const to=today(),from=dateShift(-(statementPresetDays-1));
+      const fromEl=$('#stmtFrom'),toEl=$('#stmtTo');
+      if(fromEl) fromEl.value=from;
+      if(toEl) toEl.value=to;
+      $$('[data-stmtdays]').forEach(x=>x.classList.toggle('active',x===b));
+      refreshStatement();
+    };
+  });
+  const gen=$('#stmtGenerateBtn'), prn=$('#stmtPrintBtn'), csv=$('#stmtCsvBtn'), shr=$('#stmtShareBtn');
+  if(gen) gen.onclick=refreshStatement;
+  if(prn) prn.onclick=printStatement;
+  if(csv) csv.onclick=downloadStatementCSV;
+  if(shr) shr.onclick=shareStatement;
+}
+
 function bindView(){
   $$('[data-action]').forEach(b=>b.onclick=()=>action(b.dataset.action));
   $$('[data-viewjump]').forEach(b=>b.onclick=()=>{currentView=b.dataset.viewjump;render()});
   $$('[data-invtab]').forEach(b=>b.onclick=()=>{inventoryTab=b.dataset.invtab;render()});
-  $('[data-remdone]').forEach(b=>b.onclick=()=>{const id=b.dataset.remdone; const r=(db.reminders||[]).find(x=>x.id===id); if(r){r.done=true;r.doneAt=nowISO();save(`Reminder ${r.title} completed`);render();toast('Reminder marked done')}});
-  $('[data-remdelete]').forEach(b=>b.onclick=()=>{const id=b.dataset.remdelete; const r=(db.reminders||[]).find(x=>x.id===id); if(confirm('Delete this reminder?')){db.reminders=(db.reminders||[]).filter(x=>x.id!==id);save(`Reminder ${r?.title||id} deleted`);render();toast('Reminder deleted')}});
-  $$('[data-stmtdays]').forEach(b=>b.onclick=()=>{
-    statementPresetDays=Number(b.dataset.stmtdays||30);
-    const to=today(),from=dateShift(-(statementPresetDays-1));
-    $('#stmtFrom').value=from;$('#stmtTo').value=to;
-    $$('[data-stmtdays]').forEach(x=>x.classList.toggle('active',x===b));
-    refreshStatement();
-  });
-  if($('#stmtGenerateBtn')) $('#stmtGenerateBtn').onclick=refreshStatement;
-  if($('#stmtPrintBtn')) $('#stmtPrintBtn').onclick=printStatement;
-  if($('#stmtCsvBtn')) $('#stmtCsvBtn').onclick=downloadStatementCSV;
-  if($('#stmtShareBtn')) $('#stmtShareBtn').onclick=shareStatement;
+  $$('[data-remdone]').forEach(b=>b.onclick=()=>{const id=b.dataset.remdone; const r=(db.reminders||[]).find(x=>x.id===id); if(r){r.done=true;r.doneAt=nowISO();save(`Reminder ${r.title} completed`);render();toast('Reminder marked done')}});
+  $$('[data-remdelete]').forEach(b=>b.onclick=()=>{const id=b.dataset.remdelete; const r=(db.reminders||[]).find(x=>x.id===id); if(confirm('Delete this reminder?')){db.reminders=(db.reminders||[]).filter(x=>x.id!==id);save(`Reminder ${r?.title||id} deleted`);render();toast('Reminder deleted')}});
+  bindStatementControls();
   if($('#closeDayBtn')) $('#closeDayBtn').onclick=closeDay;
   if($('#saveSettingsBtn')) $('#saveSettingsBtn').onclick=()=>{db.settings.clinicName=$('#setClinicName').value;db.settings.owner=$('#setOwner').value;db.settings.consultationRate=Number($('#setConsult').value||0);db.settings.followupRate=Number($('#setFollow').value||0);save('Clinic settings updated');render();toast('Settings saved')};
   if($('#settingsBackupBtn')) $('#settingsBackupBtn').onclick=backup;

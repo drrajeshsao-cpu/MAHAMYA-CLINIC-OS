@@ -1,0 +1,32 @@
+MAHAMAYA CLINIC OS V1.7.2 — PERMANENT STATEMENTS FIX
+Updated: 13 Aug 2026
+
+ROOT CAUSE FOUND
+The previous hotfix did not solve the actual runtime failure.
+In bindView(), reminder controls used:
+  $('[data-remdone]').forEach(...)
+  $('[data-remdelete]').forEach(...)
+But $() returns only ONE element, not a NodeList. Calling .forEach() caused a JavaScript TypeError.
+Because this error occurred BEFORE the Statements bindings, the following controls never received click handlers:
+- Period preset buttons
+- Generate Statement
+- Print / Save PDF
+- CSV
+- WhatsApp / Share
+
+PERMANENT FIX
+1. Corrected both reminder selectors from $() to $$().
+2. Separated all Statements bindings into bindStatementControls().
+3. Added defensive render error containment so one optional module cannot disable Statements.
+4. Updated service-worker cache to V1.7.2.
+5. Updated app.js/styles/cloud-sync query versions to 1.7.2 to force browsers/PWA to load fresh files.
+6. Existing Firebase/login/cloud/data schema untouched.
+7. Existing V1.7 compassionate billing untouched.
+
+AFTER GITHUB UPLOAD
+Do a hard refresh once:
+Windows: Ctrl + Shift + R
+If installed as PWA: close app fully and reopen after deployment.
+
+EXACT COMMIT MESSAGE:
+MAHAMAYA CLINIC OS — V1.7.2 — Permanently fix Statements controls runtime binding and cache

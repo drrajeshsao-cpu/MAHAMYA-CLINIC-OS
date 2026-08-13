@@ -1,7 +1,7 @@
 {
-  "name": "Mahamaya Clinic OS \u2014 V1.7.1 Statements Hotfix",
+  "name": "Mahamaya Clinic OS V1.7.2",
   "short_name": "Mahamaya OS",
-  "start_url": "./?v=1.7",
+  "start_url": "./?v=1.7.2",
   "display": "standalone",
   "background_color": "#fff9e8",
   "theme_color": "#9d6b05",
